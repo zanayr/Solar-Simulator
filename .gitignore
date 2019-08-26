@@ -1,0 +1,11 @@
+#FOLDERS
+/env/
+/txt/
+/void/
+
+#FILES
+*.html
+*.css
+
+#MISC
+.DS_Store
