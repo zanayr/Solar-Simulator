@@ -2,6 +2,8 @@
 /env/
 /txt/
 /void/
+/ref/
+/lib/
 
 #FILES
 *.html
