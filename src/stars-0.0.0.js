@@ -1,40 +1,24 @@
 /*  To Do List
 -   Star's orbits, major and minor axis
--   Colors are the same
 */
-
 var _system,
     scene;
-// (function () {
-//     var canvas = grab('0xcanvas'),
-//         geometery = new THREE.SphereGeometry(20, 10, 10);
-//         material = new THREE.MeshBasicMaterial({color: 0xffffff, wireframe: true});
-//         mesh = new THREE.Mesh(geometery, material);
-//     scene = new THREE.Scene();
-//     camera = new THREE.PerspectiveCamera(35, canvas.width / canvas.height, 1, 20000);
-//     camera.position.set(-1000, 0, 0);
-//     camera.lookAt(scene.position);
-//     renderer = new THREE.WebGLRenderer();
-//     renderer.setSize(canvas.width, canvas.height);
-//     renderer.setClearColor(0x040d0c, 1);
-//     canvas.append(renderer.domElement);
-//     mesh.position.set(0, 0, 0);
-//     scene.add(mesh);
-//     renderer.render(scene, camera);
-// }());
 
 
 (function () {
     var canvas,
+        loop,
         renderer,
+        SEED,
         STAR_CLASS = ['M', 'K', 'G', 'F', 'A', 'D'],
+        STAR_PROB = [50, 75, 85, 95, 100],
         STAR_COLOR = [0xfd113c, 0xee0000, 0xf03412, 0xf04912, 0xe8601d, 0xf06b12, 0xfe9013, 0xffa500, 0xf3a214, 0xf3c220, 0xfade17, 0xf5d04c, 0xf5e54c, 0xf8ec81, 0xfff5c3, 0xfbf3b1, 0xfdfdd9, 0xffffff, 0xedeeff, 0xd4d6ff];
         // STAR_COLOR = ['#fd113c', '#ee0000', '#f03412', '#f04912', '#e8601d', '#f06b12', '#fe9013', '#ffa500', '#f3a214', '#f3c220', '#fade17', '#f5d04c', '#f5e54c', '#f8ec81', '#fff5c3', '#fbf3b1', '#fdfdd9', '#ffffff', '#edeeff',  '#d4d6ff'];
     
     //  AUXILLARY FUNCTIONS  //
     //  Parse Probability Table  //
     function parse (p, s) {
-        var a = Math.round(100 * (parseInt(s, 16) / 15)),
+        var a = Math.round(100 * (parseInt(s, 16) / 255)),
             i;
         for (i = 0; i < p.length; i++)
             if (a <= p[i])
@@ -57,32 +41,55 @@ var _system,
             return v.toString(16);
         });
     }
+    function getBarrycenterOffset(a, m1, m2) {
+        return Math.round(100 * a * (m2 / (m1 + m2))) / -100;
+    }
+
+
+    function Sphere (r, c) {
+        var u = Math.round(r / 9) + 9,
+            geometry = new THREE.SphereGeometry(r, u, u),
+            material = new THREE.MeshBasicMaterial({color: c, wireframe: true});
+        Object.defineProperties(this, {
+            color: {
+                value: c
+            },
+            geometry: {
+                value: geometry
+            },
+            material: {
+                value: material
+            },
+            mesh: {
+                value: new THREE.Mesh(geometry, material)
+            },
+            radius: {
+                value: r
+            }
+        });
+    }
 
 
     //  SYSTEM OBJECTS  //
-    function System (seed) {
+    function System () {
         Object.defineProperties(this, {
             handle: {
                 value: new THREE.Object3D()
             },
             age: {
-                value: Math.round(((10 * (parseInt(seed[0], 16) / 15)) + 2 * parseInt(seed[1] + seed[2], 16) / 255) * 100) / 100
+                value: Math.round(((10 * (parseInt(SEED[0], 16) / 15)) + 2 * parseInt(SEED[1] + SEED[2], 16) / 255) * 100) / 100
             },
             binary: {
-                value: parseInt(seed[3], 16) >= 10
+                value: parseInt(SEED[3], 16) >= 10
             },
             iron: {
-                value: Math.round(30 * (parseInt(seed[4] + seed[5], 16) / 255)) / 100
+                value: Math.round(30 * (parseInt(SEED[4] + SEED[5], 16) / 255)) / 100
             },
             name: {
-                value: seed[6] + seed[7]
-            },
-            seed: {
-                value: seed
+                value: SEED[6] + SEED[7]
             }
         });
-        this.handle.position.set(0, 0, 0);
-        scene.add(this.handle);
+        // scene.add(this.handle);
     }
     System.prototype.describe = function () {
         console.log(this.name + '\n', 'age: ' + this.age + '\n', 'binary: ' + this.binary + '\n', 'iron: ' + this.iron + '\n', 'name: ' + this.name + '\n');
@@ -92,80 +99,33 @@ var _system,
         return this;
     };
 
-    function Sphere (r, c) {
-        var u = Math.round(r / 9) + 9;
-        this.radius = r;
-        this.color = c;
-        this.geometry = new THREE.SphereGeometry(r, u, u);
-        this.material = new THREE.MeshBasicMaterial({color: c, wireframe: true});
-        this.mesh = new THREE.Mesh(this.geometry, this.material);
-    }
-
-    function getStarValues(cls) {
-        var exhausted = _system.age >= cls < 3 ? 14 - cls : 14 - 2 * (cls - 1),
-            color,
-            radius,
-            volume;
-        switch (cls) {
-            case 1:
-                color = (parseInt(_system.seed[8], 16) % 4) + 4;
-                radius = Math.round(20 * (parseInt(_system.seed[9], 16) / 15)) + 100;
-                break;
-            case 2:
-                color = (parseInt(_system.seed[8], 16) % 4) + 8;
-                radius = Math.round(20 * (parseInt(_system.seed[9], 16) / 15)) + 120;
-                break;
-            case 3:
-                color = (parseInt(_system.seed[8], 16) % 4) + 12
-                radius = Math.round(20 * (parseInt(_system.seed[9], 16) / 15)) + 140;
-                break;
-            case 4:
-                color = (parseInt(_system.seed[8], 16) % 4) + 16;
-                radius = Math.round(20 * (parseInt(_system.seed[9], 16) / 15)) + 160;
-                break;
-            default:
-                color = parseInt(_system.seed[8], 16) % 4;
-                radius = Math.round(20 * (parseInt(_system.seed[9], 16) / 15)) + 50;
-                break;
-        }
-        volume = Math.round(133 * Math.PI * Math.pow(radius, 3)) / 100;
-        mass = Math.round(141 * (volume / 10000)) / 100;
-        if (exhausted) {
-            switch (cls) {
-                case 1:
-                    color = parseInt(_system.seed[8], 16) % 4;
-                    radius = Math.round(20 * (parseInt(_system.seed[9], 16) / 15)) + 140;
-                    mass -= 100;
-                    break;
-                case 2:
-                    color = parseInt(_system.seed[8], 16) % 4;
-                    radius = Math.round(20 * (parseInt(_system.seed[9], 16) / 15)) + 160;
-                    mass -= 100;
-                    break;
-                case 3:
-                case 4:
-                    color = (parseInt(_system.seed[8], 16) % 4) + 16;
-                    radius = Math.round(6 * (parseInt(_system.seed[9], 16) / 15)) + 9;
-                    mass -= 300;
-                    break;
-                default:
-                    break;
-            }
-            volume = Math.round(133 * Math.PI * Math.pow(radius, 3)) / 100;
+    //  Star Object  //
+    function getStarProperties(seed) {
+        var p = parse(STAR_PROB, seed),
+            exhausted = p > 2 ? _system.age >= 14 - 2 * (p - 1) : _system.age >= 14 - p;
+            color = (parseInt(seed[0], 16) % 4) + 4 * p,
+            radius = Math.round(20 * (parseInt(seed[1], 16) / 15)) + (p ? 100 + (20 * p) : 50),
+            volume = Math.round(133 * Math.PI * Math.pow(radius, 3)) / 100,
+            mass = Math.round(141 * (volume / 10000)) / 100;
+        if (exhausted && p > 2) {
+            //  IF the star is exhausted and is above a 2, then it is a white dwarf
+            color = (parseInt(seed[0], 16) % 4) + 16;
+            radius = Math.round(6 * (parseInt(seed[1], 16) / 15)) + 9;
+        } else if (exhausted) {
+            //  If the star is exhausted, but is below a 3, then it is a red giant
+            color = parseInt(seed[0], 16) % 4;
+            radius = Math.round(20 * (parseInt(seed[1], 16) / 15)) + 120 + (20 * p);
         }
         return {
-            class: cls,
+            class: exhausted && p > 2 ? 5 : p,
             color: color,
             mass: mass,
             radius: radius,
             volume: volume,
         }
     }
-    function Star (prob, seed) {
+    function Star (seed) {
         Object.defineProperties(this, {
-            age: {
-                value: _system.age
-            },
             color: {
                 get: function () {
                     return STAR_COLOR[this.values.color];
@@ -174,11 +134,6 @@ var _system,
             class: {
                 get: function () {
                     return STAR_CLASS[this.values.class];
-                }
-            },
-            density: {
-                get: function () {
-                    return Math.round(this.values.mass / this.values.volume * 1000000) / 100;
                 }
             },
             handle: {
@@ -198,56 +153,203 @@ var _system,
                 }
             },
             values: {
-                value: Object.assign({x: 0, y: 0}, getStarValues(parse(prob, seed)))
+                value: Object.assign({x: 0, y: 0, z: 0}, getStarProperties(seed))
             },
             x: {
                 get: function () {
                     return this.values.x;
                 },
                 set: function (value) {
-                    if (typeof value === 'number' && isFinite(value))
+                    if (typeof value === 'number' && isFinite(value)) {
                         this.values.x = value;
+                        this.handle.position.set(value, this.y, this.z);
+                    }
+                    return value;
+                }
+            },
+            y: {
+                get: function () {
+                    return this.values.y;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value)) {
+                        this.values.y = value;
+                        this.handle.position.set(this.x, value, this.z);
+                    }
+                    return value;
+                }
+            },
+            z: {
+                get: function () {
+                    return this.values.z;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value)) {
+                        this.values.z = value;
+                        this.handle.position.set(this.x, this.y, value);
+                    }
                     return value;
                 }
             }
         });
-        Object.defineProperty(this, 'object', {
+        //  Set THREE sphere object
+        Object.defineProperty(this, 'THREE', {
             value: new Sphere(this.radius, this.color)
         });
-        this.handle.add(this.object.mesh);
+        //  Set incline and add to the sphere mesh to handle object
+        this.THREE.geometry.rotateX((parseInt(SEED[0], 16) * Math.PI) / 180);
+        this.handle.add(this.THREE.mesh);
+    }
+    Star.prototype.position = function () {
+        var i;
+        for (i = 0; i < 3; i++)
+            if (typeof arguments[i] !== 'number' || !isFinite(arguments[i]))
+                return this;
+        this.x = arguments[0];
+        this.y = arguments[1];
+        this.z = arguments[2];
+        this.handle.position.set(arguments[0], arguments[1], arguments[2]);
+        return this;
+    };
+
+
+    //  Loop Object  //
+    function Loop (fn) {
+        Object.defineProperties(this, {
+            delta: {
+                get: function () {
+                    return this.values.delta;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.values.delta = value;
+                    return value;
+                }
+            },
+            fps: {
+                get: function () {
+                    return this.values.fps;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.values.fps = value;
+                    return value;
+                }
+            },
+            fts: {
+                get: function () {
+                    return this.values.fts;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.values.fts = value;
+                    return value;
+                }
+            },
+            id: {
+                get: function () {
+                    return this.store.id;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.store.id = value;
+                    return value;
+                }
+            },
+            lastFps: {
+                get: function () {
+                    return this.values.lastFps;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.values.lastFps = value;
+                    return value;
+                }
+            },
+            lastFt: {
+                get: function () {
+                    return this.values.lastFt;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.values.lastFt = value;
+                    return value;
+                }
+            },
+            maxFps: {
+                get: function () {
+                    return this.values.maxFps;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.values.maxFps = value;
+                    return value;
+                }
+            },
+            state: {
+                get: function () {
+                    return this.store.state;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value) && (value === 0 || value === 1))
+                        this.store.state = value;
+                    return value;
+                }
+            },
+            store: {
+                value: {
+                    id: 0,
+                    state: 0,
+                }
+            },
+            timestep: {
+                get: function () {
+                    return 1000 / this.maxFps;
+                }
+            },
+            values: {
+                value: {
+                    delta: 0,
+                    fps: 0,
+                    fts: 0,
+                    lastFps: 0,
+                    lastFt: 0,
+                    maxFps: fps
+                }
+            }
+        });
     }
 
 
+    //  Create Stars  //
     function stars () {
-        var alpha = new Star ([53, 73, 87, 97, 100], _system.seed[7]),
-            beta,
-            d,
-            a;
-        _system.A = alpha;
-        if (_system.binary) {
-            beta = new Star ((function () {
-                var m = Math.round(50 * (alpha.radius / 150));
-                return [m, Math.round(m + (100 - m) * 0.66), 100];
-            }()), _system.seed[8]);
-            _system.A = alpha.mass > beta.mass ? alpha : beta;
-            _system.B = _system.A.id === alpha.id ? beta : alpha;
-            d = _system.A.radius + _system.B.radius + 20 + parseInt(_system.seed[0] + _system.seed[1], 16);
-            a = Math.round( 100 * d * (beta.mass / (alpha.mass + beta.mass))) / -100;
-            _system.A.handle.position.set(a, 0, 0);
-            _system.B.handle.position.set(a + d, 0, 0);
+        var A, B, distance, offset; // Alpha, Beta, distance from A's center to B's center, offset of A from the Barrycenter
+        //  Create alpha star
+        A = new Star(SEED[0] + SEED[1]);
+        if (!_system.binary) {
+            //  Set system alpha and add the new star to the system
+            _system.A = A;
+            _system.handle.add(_system.A.handle);
+        } else {
+            //  Create beta star
+            B = new Star(SEED[1] + SEED[2]);
+            //  The largest of the two stars will be the system's alpha
+            _system.A = A.mass > B.mass ? A : B;
+            _system.B = _system.A.id === A.id ? B : A;
+            //  Calculate the Barrycenter of the two stars, which will be the center of the system
+            distance = A.radius + B.radius + parseInt(SEED[0] + SEED[1], 16) + 20; // Minimum value of two radii and 20
+            offset = getBarrycenterOffset(distance, A.mass, B.mass);
+            //  Set star positions
+            _system.A.x = offset;
+            _system.B.x = offset + distance;
+            //  Add the stars to the system
             _system.handle.add(_system.A.handle);
             _system.handle.add(_system.B.handle);
-        } else {
-            _system.handle.add(_system.A.handle);
         }
         return;
     }
-    function planets () {
-        //  Do something...
-    }
     function populate () {
         stars();
-        planets();
     }
     function init () {
         canvas = grab('#canvas');
@@ -259,11 +361,17 @@ var _system,
         renderer.setSize(canvas.width, canvas.height);
         renderer.setClearColor(0x040d0c, 1);
         canvas.append(renderer.domElement);
-        _system = new System(seed());
+        loop = new Loop(update);
+    }
+    function system () {
+        SEED = seed();
+        _system = new System();
         populate();
-        renderer.render(scene, camera);
     }
 
-    init();
+    // init();
+    system();
+    // renderer.render(scene, camera);
     _system.describe();
+    loop.start();
 }());
