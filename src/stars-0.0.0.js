@@ -9,6 +9,7 @@ var _system,
     var canvas,
         loop,
         renderer,
+        _objects = {},
         SEED,
         STAR_CLASS = ['M', 'K', 'G', 'F', 'A', 'D'],
         STAR_PROB = [50, 75, 85, 95, 100],
@@ -89,7 +90,7 @@ var _system,
                 value: SEED[6] + SEED[7]
             }
         });
-        // scene.add(this.handle);
+        scene.add(this.handle);
     }
     System.prototype.describe = function () {
         console.log(this.name + '\n', 'age: ' + this.age + '\n', 'binary: ' + this.binary + '\n', 'iron: ' + this.iron + '\n', 'name: ' + this.name + '\n');
@@ -147,6 +148,9 @@ var _system,
                     return this.values.mass;
                 }
             },
+            e: {
+                value: 0
+            },
             radius: {
                 get: function () {
                     return this.values.radius;
@@ -162,7 +166,7 @@ var _system,
                 set: function (value) {
                     if (typeof value === 'number' && isFinite(value)) {
                         this.values.x = value;
-                        this.handle.position.set(value, this.y, this.z);
+                        this.handle.position.x = value;
                     }
                     return value;
                 }
@@ -174,7 +178,7 @@ var _system,
                 set: function (value) {
                     if (typeof value === 'number' && isFinite(value)) {
                         this.values.y = value;
-                        this.handle.position.set(this.x, value, this.z);
+                        this.handle.position.y = value;
                     }
                     return value;
                 }
@@ -186,7 +190,7 @@ var _system,
                 set: function (value) {
                     if (typeof value === 'number' && isFinite(value)) {
                         this.values.z = value;
-                        this.handle.position.set(this.x, this.y, value);
+                        this.handle.position.z = value;
                     }
                     return value;
                 }
@@ -199,6 +203,7 @@ var _system,
         //  Set incline and add to the sphere mesh to handle object
         this.THREE.geometry.rotateX((parseInt(SEED[0], 16) * Math.PI) / 180);
         this.handle.add(this.THREE.mesh);
+        _objects[this.id] = this;
     }
     Star.prototype.position = function () {
         var i;
@@ -208,13 +213,70 @@ var _system,
         this.x = arguments[0];
         this.y = arguments[1];
         this.z = arguments[2];
-        this.handle.position.set(arguments[0], arguments[1], arguments[2]);
+        return this;
+    };
+    Star.prototype.update = function (step) {
+        this.handle.rotation.y += 0.01;
+        this.x = this.x * Math.cos(step);
+        this.z = this.z * Math.sin(step);
+        console.log(step);
         return this;
     };
 
 
     //  Loop Object  //
-    function Loop (fn) {
+    
+    function main (timestamp) {
+        cycles = 0;
+        if (loop.state) {
+            if (timestamp < loop.lastFt + loop.timestep) {
+                loop.id = window.requestAnimationFrame(main);
+                return;
+            }
+            loop.delta += (timestamp - loop.lastFt);
+            loop.lastFt = timestamp;
+            if (timestamp > loop.lastFt + 1000) {
+                loop.fps = 0.25 * loop.fts + 0.75 * loop.fps;
+                loop.lastFps = timestamp;
+                loop.fts = 0;
+            }
+            loop.fts++;
+            while (loop.delta >= loop.timestep) {
+                update();
+                loop.delta -= loop.timestep;
+                cycles++;
+                if (cycles >= 240) {
+                    loop.delta = 0;
+                    break;
+                }
+            }
+            render();
+            loop.id = window.requestAnimationFrame(main);
+            return;
+        }
+    }
+    function  render () {
+        renderer.render(scene, camera);
+    }
+    function start () {
+        if (!loop.state) {
+            loop.id = window.requestAnimationFrame(function (timestamp) {
+                loop.state = 1;
+                render();
+                loop.lastFt = timestamp;
+                loop.lastFps = timestamp;
+                loop.fts = 0;
+                loop.id = requestAnimationFrame(main);
+            });
+        }
+        return;
+    }
+    function update () {
+        var o;
+        for (o in _objects)
+            _objects[o].update(loop.timestep);
+    }
+    function Loop (fps) {
         Object.defineProperties(this, {
             delta: {
                 get: function () {
@@ -319,7 +381,25 @@ var _system,
             }
         });
     }
+    
 
+
+    //  Loop Functions  //
+    
+
+    //  Init Function
+    function init () {
+        canvas = grab('#canvas');
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(35, canvas.width / canvas.height, 1, 20000);
+        camera.position.set(0, -2000, 0);
+        camera.lookAt(scene.position);
+        renderer = new THREE.WebGLRenderer();
+        renderer.setSize(canvas.width, canvas.height);
+        renderer.setClearColor(0x040d0c, 1);
+        canvas.append(renderer.domElement);
+        loop = new Loop(60);
+    }
 
     //  Create Stars  //
     function stars () {
@@ -348,30 +428,15 @@ var _system,
         }
         return;
     }
-    function populate () {
-        stars();
-    }
-    function init () {
-        canvas = grab('#canvas');
-        scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(35, canvas.width / canvas.height, 1, 20000);
-        camera.position.set(0, 0, -2000);
-        camera.lookAt(scene.position);
-        renderer = new THREE.WebGLRenderer();
-        renderer.setSize(canvas.width, canvas.height);
-        renderer.setClearColor(0x040d0c, 1);
-        canvas.append(renderer.domElement);
-        loop = new Loop(update);
-    }
-    function system () {
+    function create () {
         SEED = seed();
         _system = new System();
-        populate();
+        stars();
     }
 
-    // init();
-    system();
+    init();
+    create();
     // renderer.render(scene, camera);
     _system.describe();
-    loop.start();
+    start();
 }());
