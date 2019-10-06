@@ -4,15 +4,24 @@ var system,
     var _AGE,
         _FPS = 60,
         _OBJECTS = {},
+        _PLANET_MAX = 9,
+        _PLANET_MIN = 3,
         _SEED,
         _SPEED = 0.025,
         _STAR_COLOR = [0xfd113c, 0xee0000, 0xf03412, 0xf04912, 0xe8601d, 0xf06b12, 0xfe9013, 0xffa500, 0xf3a214, 0xf3c220, 0xfade17, 0xf5d04c, 0xf5e54c, 0xf8ec81, 0xfff5c3, 0xfbf3b1, 0xfdfdd9, 0xffffff, 0xedeeff, 0xd4d6ff],
-        _ALPHA_PROB = [50, 75, 90, 100],
-        _BETA_PROB = [80, 90, 100],
+        _PROB_ALPHA = [50, 75, 90, 100], // M, K, G, A
+        _PROB_BETA = [80, 90, 100], // M, K, G
+        _PROB_PLANET = [25, 50, 75, 100], // M, T, N, J <-- fix probability 
+        _PROB_MOON = [25, 50, 75],
         camera,
         loop,
         renderer,
         scene;
+    /*  Notes
+        If terrastial = 10r +- 6.5, minor planets would be <2.5r +- 2, and jovan moons would be 20 +- 10?
+        Minor: 1-3, Terrastrial: 3-6, Super: 6-9, Neptunian: 9-12, Jovan: 12-15
+        Atmospheres: >2
+    */
     //  Auxillary Functions  //
     function describe (object) {
         console.log(Object.getPrototypeOf(object).constructor.name);
@@ -81,8 +90,8 @@ var system,
         this.z.object.visible = true;
     };
     //  Ellipse Object  //
-    function Ellipse (major, minor, color) {
-        var curve = new THREE.EllipseCurve(0, 0, Math.abs(major), Math.abs(minor), 0, 2 * Math.PI, false, 0),
+    function Ellipse (f, major, minor, color) {
+        var curve = new THREE.EllipseCurve(f, 0, Math.abs(major), Math.abs(minor), 0, 2 * Math.PI, false, 0),
             points = curve.getPoints(Math.abs(major)),
             geometry = new THREE.Geometry(),
             i;
@@ -97,14 +106,7 @@ var system,
     Ellipse.prototype.show = function () {
         this.curve.visible = true;
     };
-    //  Sphere Object  //
-    // function Sphere (radius, color) {
-    //     var u = Math.round(radius / 20) + 6;
-    //     this.geometry = new THREE.SphereGeometry(radius, u, u);
-    //     this.material = new THREE.MeshBasicMaterial({color: color, wireframe: true});
-    //     this.object = new THREE.Mesh(this.geometry, this.material);
-    // }
-    function SphereII (radius, color) {
+    function Sphere (radius, color) {
         var u = Math.round(radius / 20) + 6;
         this.geometry = new THREE.Mesh(
             new THREE.SphereGeometry(radius, u, u),
@@ -112,7 +114,7 @@ var system,
         );
     }
 
-    //  Loop Objects and Functions  //
+    //  Interpolated Loop Object  //
     function update (step) {
         var object;
         system.radian += step * (Math.PI / 180);
@@ -191,7 +193,6 @@ var system,
         });
     }
 
-    
     //  Seed Object  //
     function Seed (str, len) {
         function sanitize (s) {
@@ -236,21 +237,43 @@ var system,
         });
     };
 
-
-    function OrbitII (major, minor) {
-        this.major = major; // Semi-major axis
-        this.minor = minor; // Semi-minor axis
-        this.eccentricity = major !== minor ? Math.sqrt(1 - (Math.pow(minor, 2) / Math.pow(major, 2))) : 0; // Eccentricity
-        this.focus = this.eccentricity * major; // Offset of focus
+    //  Orbit Object  //
+    //  The Orbit constructor returns an orbit object, used in the loop's update
+    //  function to update a celestial object's position
+    function OrbitII (major, minor, focus) {
+        this.e = major !== minor ? Math.sqrt(1 - (Math.pow(minor, 2) / Math.pow(major, 2))) : 0;
+        // this.F = Math.sqrt(Math.pow(major, 2) - Math.pow(minor, 2));
+        this.a = major;
+        this.b = minor;
+        this.c = this.e * major;
+        this.theta = 0;
+        Object.defineProperty(this, 'r', {
+            get: function () {
+                return this.a * (1 - Math.pow(this.e, 2)) / (1 + this.e * Math.cos(this.theta));
+            }
+        });
     }
-    OrbitII.prototype.getPolar = function (angle) {
-        return this.major * (1 - Math.pow(this.eccentricity, 2)) / (1 + this.eccentricity * Math.cos(angle));
-    };
+    OrbitII.prototype.setF = function (n) {
+        this.F = n;
+    }
+    // function Orbit (major, minor) {
+    //     this.major = major; // Semi-major axis
+    //     this.minor = minor; // Semi-minor axis
+    //     this.eccentricity = major !== minor ? Math.sqrt(1 - (Math.pow(minor, 2) / Math.pow(major, 2))) : 0; // Eccentricity
+    //     this.focus = this.eccentricity * major; // Offset of focus
+    // }
+    //  The getPolar method returns the polar coordinate of the celestial object
+    // Orbit.prototype.getPolar = function (angle) {
+    //     return this.major * (1 - Math.pow(this.eccentricity, 2)) / (1 + this.eccentricity * Math.cos(angle));
+    // };
 
-    function CelestialII (radius, color) {
+    //  Celestial Object  //
+    //  The Celestial constructor should return a base celestial object with a radius,
+    //  color and THREE.js sphere geometry
+    function Celestial (radius, color) {
         this.color = color;
         this.id = uid();
-        this.object = new SphereII(radius, color);
+        this.object = new Sphere(radius, color);
         this.radius = radius;
         Object.defineProperties(this, {
             x: {
@@ -259,7 +282,7 @@ var system,
                 },
                 set: function (value) {
                     if (typeof value === 'number' && isFinite(value))
-                        this.object.geometry.position.x = value * system.direction;
+                        this.object.geometry.position.x = value;
                     return value;
                 }
             },
@@ -269,7 +292,7 @@ var system,
                 },
                 set: function (value) {
                     if (typeof value === 'number' && isFinite(value))
-                        this.object.geometry.position.y = value * system.direction;
+                        this.object.geometry.position.y = value;
                     return value;
                 }
             },
@@ -286,52 +309,104 @@ var system,
         });
         _OBJECTS[this.id] = this;
     }
-    CelestialII.prototype.setOrbit = function (orbit) {
+    Celestial.prototype.setOrbit = function (orbit) {
+        var f;
         if (orbit instanceof OrbitII) {
             this.orbit = orbit;
-            this.orbit.ellipse = new Ellipse(orbit.major, orbit.minor, this.color);
+            this.orbit.ellipse = new Ellipse(orbit.c, orbit.a, orbit.b, this.color);
+            new Line(new THREE.Vector3(-5, 0, 0), new THREE.Vector3(5, 0, 0), this.color);
+            new Line(new THREE.Vector3(0, 0, -5), new THREE.Vector3(0, 0, 5), this.color);
+            new Line(new THREE.Vector3(2 * orbit.c - 5, 0, 0), new THREE.Vector3(2 * orbit.c + 5, 0, 0), this.color);
+            new Line(new THREE.Vector3(2 * orbit.c, 0, -5), new THREE.Vector3(2 * orbit.c, 0, 5), this.color);
         }
         return this;
     };
-    CelestialII.prototype.update = function () {
-        this.object.geometry.rotation.y = system.radian * system.direction * -1;
-        this.x = this.orbit.focus + this.orbit.getPolar(system.radian) * Math.cos(system.radian);
-        this.z = this.orbit.getPolar(system.radian) * Math.sin(system.radian);
+    Celestial.prototype.update = function () {
+        this.orbit.theta = system.radian;
+        // this.object.geometry.rotation.y = system.radian * system.direction * -1;
+        this.x = this.orbit.r * Math.cos(system.radian) + this.orbit.c * 2;
+        this.z = this.orbit.r * Math.sin(system.radian);
         return this;
     };
-
-    function StarII (properties) {
-        CelestialII.call(this, properties.radius, properties.color);
+    // Celestial.prototype.setOrbit = function (orbit) {
+    //     var f;
+    //     if (orbit instanceof Orbit) {
+    //         this.orbit = orbit;
+            
+    //         // this.orbit.ellipse.hide();
+    //         f = Math.sqrt(Math.pow(orbit.major, 2) - Math.pow(orbit.minor, 2));
+    //         this.orbit.ellipse = new Ellipse(0, orbit.major, orbit.minor, this.color);
+    //         this.orbit.f1 = new Line(new THREE.Vector3(f, 0, 0), new THREE.Vector3(f, 0, 100), this.color);
+    //         this.orbit.f2 = new Line(new THREE.Vector3(f * -1, 0, 0), new THREE.Vector3(f * -1, 0, 100), this.color);
+    //     }
+    //     return this;
+    // };
+    // Celestial.prototype.update = function () {
+    //     this.object.geometry.rotation.y = system.radian * system.direction * -1;
+    //     this.x = this.orbit.focus + this.orbit.getPolar(system.radian) * Math.cos(system.radian) + Math.sqrt(Math.pow(this.orbit.major, 2) - Math.pow(this.orbit.minor, 2));
+    //     this.z = this.orbit.getPolar(system.radian) * Math.sin(system.radian);
+    //     return this;
+    // };
+    //  Planet  //
+    function Planet (properties) {
+        Celestial.call(this, properties.radius, properties.color);
         this.class = properties.type;
         this.mass = properties.mass;
     }
-    StarII.prototype = Object.create(CelestialII.prototype);
-    StarII.prototype.constructor = StarII;
-
+    Planet.prototype = Object.create(Celestial.prototype);
+    Planet.prototype.constructor = Planet;
+    //  Star Object  //
+    //  The getStarProperties function should return an object with values for type,
+    //  radius, mass and color for the seed and probability table passed
     function getStarProperties (table, seed) {
-        var t, r, m, c, variance, min;
-        //  Get star "temperature" from the probablility table
-        c = propbability(table, parseInt(seed, 16) / 255);
-        //  Check if the star is exhausted
-        if (c && _AGE >= 10 - c) {
-            //  If it is, the star will either be a red giant or white dwarf
-            variance = c !== 3 ? 20 : 3;
-            min = c !== 3 ? 240 : 6;
-            t = c === 3 ? 4 : c;
-        } else {
-            //  If it is not, set the default values
-            variance = 20;
-            min = c ? 20 * (c + 3) : 30;
-            t = c;
-        }
-        //  Get the star radius and mass
-        r = Math.round((parseInt(seed, 16) / 255) * variance + min);
+        var t, r, m, c;
+        t = c = propbability(table, parseInt(seed, 16) / 255);
+        r = Math.round((parseInt(seed, 16) / 255) * 20 + (c ? 20 + (c + 3) : 30));
         m = round(((parseInt(seed, 16) / 255) * 0.17 + 1.33) * volumeII(r) / 1000, 2);
-        //  Get the color of the star with the seed and "temperature"
+        if (c && _AGE >= 10 - c) {
+            r = Math.round((parseInt(seed, 16) / 255) * (c !== 3 ? 20 : 3) + (c !== 3 ? 240 : 6));
+            t = c === 3 ? 4 : c;
+        }
         c = _STAR_COLOR[(parseInt(seed[0], 16) % 4) + 4 * c];
         return {type: t, radius: r, mass: m, color: c};
     }
+    //  Star  //
+    function Star (properties) {
+        Celestial.call(this, properties.radius, properties.color);
+        this.class = properties.type;
+        this.mass = properties.mass;
+    }
+    Star.prototype = Object.create(Celestial.prototype);
+    Star.prototype.constructor = Star;
 
+    //  System Objects  //
+    function createPlanets (sys) {
+        var i, lim, n, p;
+        function next (last) {
+            switch (last.class) {
+                case 0: // Minor
+                    break;
+                case 1: // Terrestrial
+                    break;
+                case 2: // jovan
+                default:
+                    break;
+            }
+        }
+        for (i = 0, lim = _SEED.parseSetRatio(4, 2) * (_PLANET_MAX - _PLANET_MIN) + _PLANET_MIN + 1; i < lim; i++) {
+            n = String.fromCharCode(65 + i);
+            Object.defineProperty(sys, n, {
+                get: function () {
+                    return _OBJECTS[this.objects[n + 'Id']]
+                }
+            });
+            p = new Planet(getPlanetProperties(_PROB_PLANET, _SEED.getSet(4 + i, 2)), x);
+            sys.objects[n + 'Id'] = p;
+            x = getNextAu(p);
+        }
+        return a;
+
+    }
     function System () {
         //  Create system properties
         this.direction = _SEED.parse(0) >= 8 ? 1 : -1;
@@ -340,34 +415,41 @@ var system,
         this.name = _SEED.getSet(0, 2);
         this.radian = 0; // Universal "time"
     }
+    //  Uniary System  //
+    //  The UniarySystem constructor should create a new system with one star orbiting
+    //  the system center
     function UniarySystem () {
         var star;
         System.call(this);
-        star = new StarII(getStarProperties(_ALPHA_PROB, _SEED.getSet(1, 2)));
+        star = new Star(getStarProperties(_PROB_ALPHA, _SEED.getSet(1, 2)));
         Object.defineProperties(this, {
             A: {
                 get: function () {
-                    return _OBJECTS[this.stars.A];
+                    return _OBJECTS[this.objects.alphaId];
                 }
             },
-            stars: {
+            objects: {
                 value: {
-                    A: star.id
+                    alphaId: star.id
                 }
             }
         });
         //  Set the orbit of the system to 0
-        this.A.setOrbit(new OrbitII(0, 0));
+        this.A.setOrbit(new OrbitII(108, 100, 1));
         //  Add the object geometry to the THREE scene object
         scene.add(this.A.object.geometry);
+        // createPlanets(this);
     }
     UniarySystem.prototype = Object.create(System.prototype);
     UniarySystem.prototype.constructor = UniarySystem;
+    //  Binary System  //
+    //  The BinarySystem constructor should create a new system with two stars orbiting
+    //  a barrycenter
     function BinarySystem () {
         var alpha, beta, a, b;
         System.call(this);
-        alpha = new StarII(getStarProperties(_ALPHA_PROB, _SEED.getSet(1, 2)));
-        beta = new StarII(getStarProperties(_BETA_PROB, _SEED.getSet(2, 2)));
+        alpha = new Star(getStarProperties(_PROB_ALPHA, _SEED.getSet(1, 2)));
+        beta = new Star(getStarProperties(_PROB_BETA, _SEED.getSet(2, 2)));
         Object.defineProperties(this, {
             A: {
                 get: function () {
@@ -390,8 +472,8 @@ var system,
         a = round(alpha.radius + beta.radius + _SEED.parseSetRatio(1, 2) * 180 + 20, 2); // Distance
         b = round(a * (beta.mass / (alpha.mass + beta.mass)), 2) * -1; // Barrycenter
         console.log(a, b);
-        this.A.setOrbit(new OrbitII(b, b));
-        this.B.setOrbit(new OrbitII(a + b, a + b));
+        this.A.setOrbit(new OrbitII(b, b * 0.9, 1));
+        this.B.setOrbit(new OrbitII(a + b, (a + b) * 0.9, -1));
         //  Add the object geometry to the THREE scene object
         scene.add(this.A.object.geometry);
         scene.add(this.B.object.geometry);
@@ -399,24 +481,32 @@ var system,
     BinarySystem.prototype = Object.create(System.prototype);
     BinarySystem.prototype.constructor = BinarySystem;
 
-    //  Program Functions  //
+    //  Build Functions  //
+    //  The create function should create a new system and planets
     function create () {
         _SEED = new Seed(Seed.create(), 32);
         _AGE = round(_SEED.parseRatio(0) * 12 + 1.5, 2);
-        system = _SEED.parse(0) >= 4 ? new BinarySystem() : new UniarySystem();
+        // system = _SEED.parse(0) >= 4 ? new BinarySystem() : new UniarySystem();
+        // system = new UniarySystem();
+        system = new BinarySystem();
         //  Debugging
         describe(system);
         describe(system.A);
         if (system instanceof BinarySystem)
             describe(system.B);
         axis.hide();
+        console.log('AGE: ', _AGE);
+        new Line(new THREE.Vector3(-5, 0, 0), new THREE.Vector3(5, 0, 0), 0xffffff);
+        new Line(new THREE.Vector3(0, 0, -5), new THREE.Vector3(0, 0, 5), 0xffffff);
     }
+    //  The init function creates a new THREE Scene and Camera object and set up a
+    //  THREE.js scene
     function init () {
         var canvas = $('#canvas');
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(35, canvas.width() / canvas.height(), 1, 20000);
         //  Position Camera
-        camera.position.set(2000, 2000, 2000);
+        camera.position.set(1300, 1300, 1300);
         camera.lookAt(scene.position);
         //  Set renderer
         renderer = new THREE.WebGLRenderer();
@@ -431,12 +521,6 @@ var system,
         //  Create system seed and new system object
         create();
     }
-
-    //  Init and a start program
-    init();
-    start();
-    // setTimeout(function () {
-    //     stop();
-    // }, 3000);
-    // renderer.render(scene, camera);
+    init(); // Initialize environment
+    start(); // Start system
 }());
