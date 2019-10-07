@@ -56,10 +56,7 @@ var system,
             return v.toString(16);
         });
     }
-    // function volume (r) {
-    //     return round((4 / 3) * Math.PI * Math.pow(r, 3) / 1000, 2);
-    // }
-    function volumeII (r) {
+    function volume (r) {
         return 4 / 3 * Math.PI * Math.pow(r, 3);
     }
 
@@ -95,9 +92,8 @@ var system,
 
     //  Orbital Ellipse  //
     function OrbitalEllipse (orbit, color) {
-        console.log(orbit);
-        var curve = new THREE.EllipseCurve(orbit.values.focus[0], 0, orbit.values.semiMajor, orbit.values.semiMinor, 0, 2 * Math.PI, false, 0),
-            points = curve.getPoints(Math.abs(Math.floor(orbit.values.semiMajor))),
+        var curve = new THREE.EllipseCurve(orbit.focus[0], 0, orbit.semiMajor, orbit.semiMinor, 0, 2 * Math.PI, false, 0),
+            points = curve.getPoints(Math.abs(Math.floor(orbit.semiMajor))),
             geometry = new THREE.Geometry(),
             i;
         for (i in points)
@@ -106,8 +102,8 @@ var system,
         this.foci = [
             new Line(new THREE.Vector3(-5, 0, 0), new THREE.Vector3(5, 0, 0), color),
             new Line(new THREE.Vector3(0, 0, -5), new THREE.Vector3(0, 0, 5), color),
-            new Line(new THREE.Vector3(orbit.values.focus[0] * 2 - 5, 0, 0), new THREE.Vector3(orbit.values.focus[0] * 2 + 5, 0, 0), color),
-            new Line(new THREE.Vector3(orbit.values.focus[0] * 2, 0, -5), new THREE.Vector3(orbit.values.focus[0] * 2, 0, 5), color),
+            new Line(new THREE.Vector3(orbit.focus[0] * 2 - 5, 0, 0), new THREE.Vector3(orbit.focus[0] * 2 + 5, 0, 0), color),
+            new Line(new THREE.Vector3(orbit.focus[0] * 2, 0, -5), new THREE.Vector3(orbit.focus[0] * 2, 0, 5), color),
         ];
         scene.add(this.curve);
     }
@@ -139,9 +135,9 @@ var system,
 
     //  Interpolated Loop Object  //
     function update (step) {
-        var orbit;
-        for (orbit in _ORBITS)
-            _ORBITS[orbit].update(step * (Math.PI / 180));
+        var object;
+        for (object in _OBJECTS)
+            _OBJECTS[object].update(step * (Math.PI / 180));
     }
     function render (interpolation) {
         renderer.render(scene, camera);
@@ -262,101 +258,197 @@ var system,
     //  Orbit Object  //
     //  The Orbit constructor returns an orbit object, used in the loop's update
     //  function to update a celestial object's position
-    function Orbit (a, b, t) {
-        //  a = semi-major, b = semi-minor, t = theta
+    // function Orbit (a, b, t) {
+    //     //  a = semi-major, b = semi-minor, t = theta
+    //     var e = a !== b ? Math.sqrt(1 - (Math.pow(b, 2) / Math.pow(a, 2))) : 0;
+    //     this.id = uid();
+    //     this.location = new THREE.Object3D();
+    //     Object.defineProperties(this, {
+    //         values: {
+    //             value: {
+    //                 semiMajor: a,
+    //                 semiMinor: b,
+    //                 c: a * e * 2,
+    //                 e: e,
+    //                 focus: [e * a, e * a * -1],
+    //                 theta: t || 0
+    //             }
+    //         },
+    //         x: {
+    //             get: function () {
+    //                 return this.location.position.x;
+    //             },
+    //             set: function (value) {
+    //                 if (typeof value === 'number' && isFinite(value))
+    //                     this.location.position.x = value;
+    //             }
+    //         },
+    //         y: {
+    //             get: function () {
+    //                 return this.location.position.y;
+    //             },
+    //             set: function (value) {
+    //                 if (typeof value === 'number' && isFinite(value))
+    //                     this.location.position.y = value;
+    //             }
+    //         },
+    //         z: {
+    //             get: function () {
+    //                 return this.location.position.z;
+    //             },
+    //             set: function (value) {
+    //                 if (typeof value === 'number' && isFinite(value))
+    //                     this.location.position.z = value;
+    //             }
+    //         }
+    //     });
+    //     _ORBITS[this.id] = this;
+    //     // scene.add(this.location);
+    // }
+    // Orbit.prototype.update = function (r) {
+    //     //  r = radian, p = polar coordinate
+    //     var p = this.values.semiMajor * (1 - Math.pow(this.values.e, 2)) / (1 + this.values.e * Math.cos(this.values.theta + r));
+    //     this.x = p * Math.cos(this.values.theta + r) + this.values.c;
+    //     this.z = p * Math.sin(this.values.theta + r);
+    //     this.values.theta += r; // Update theta to the new value
+    //     this.location.children.forEach(function (child) { // Update all children's rotation
+    //         child.rotation.y -= r;
+    //     });
+    // }
+    function OrbitII (a, b, t) {
         var e = a !== b ? Math.sqrt(1 - (Math.pow(b, 2) / Math.pow(a, 2))) : 0;
-        this.id = uid();
-        this.location = new THREE.Object3D();
-        Object.defineProperties(this, {
-            values: {
-                value: {
-                    semiMajor: a,
-                    semiMinor: b,
-                    c: a * e * 2,
-                    e: e,
-                    focus: [e * a, e * a * -1],
-                    theta: t || 0
-                }
-            },
-            x: {
-                get: function () {
-                    return this.location.position.x;
-                },
-                set: function (value) {
-                    if (typeof value === 'number' && isFinite(value))
-                        this.location.position.x = value;
-                }
-            },
-            y: {
-                get: function () {
-                    return this.location.position.y;
-                },
-                set: function (value) {
-                    if (typeof value === 'number' && isFinite(value))
-                        this.location.position.y = value;
-                }
-            },
-            z: {
-                get: function () {
-                    return this.location.position.z;
-                },
-                set: function (value) {
-                    if (typeof value === 'number' && isFinite(value))
-                        this.location.position.z = value;
-                }
-            }
-        });
-        _ORBITS[this.id] = this;
-        scene.add(this.location);
-    }
-    Orbit.prototype.update = function (r) {
-        //  r = radian, p = polar coordinate
-        var p = this.values.semiMajor * (1 - Math.pow(this.values.e, 2)) / (1 + this.values.e * Math.cos(this.values.theta + r));
-        this.x = p * Math.cos(this.values.theta + r) + this.values.c;
-        this.z = p * Math.sin(this.values.theta + r);
-        this.values.theta += r; // Update theta to the new value
-        this.location.children.forEach(function (child) { // Update all children's rotation
-            child.rotation.y += r;
-        });
+        this.semiMajor = a;
+        this.semiMinor = b;
+        this.c = a * e * 2;
+        this.e = e;
+        this.focus = [a * e, a * e * -1];
+        this.theta = t;
     }
 
     //  Celestial Object  //
     //  The Celestial constructor should return a base celestial object with a radius,
     //  color and THREE.js sphere geometry
-    function Celestial (radius, color) {
-        Object.assign(this, new Sphere(radius, color));
-        this.color = color;
+    function CelestialII (radius, color) {
         this.id = uid();
+        this.mass = 0;
         this.radius = radius;
+        this.type = 0;
         Object.defineProperties(this, {
             orbit: {
-                get: function () {
-                    return this.store.orbit;
-                },
                 set: function (value) {
-                    if (!this.store.orbit && value instanceof Orbit) {
-                        value.location.add(this.geometry);
-                        this.store.orbit = value;
-                        this.orbitEllipse = new OrbitalEllipse(value, this.color);
-                        this.orbitEllipse.hideFoci();
+                    if (value instanceof OrbitII) {
+                        Object.assign(this.values, value);
+                        this.orbitEllipse = new OrbitalEllipse(value, this.values.color);
                     }
+                    return value;
                 }
             },
             store: {
                 value: {
-                    orbit: null
+                    geometry: new THREE.Mesh(
+                        new THREE.SphereGeometry(radius, Math.floor(radius / 20) + 6, Math.floor(radius / 20) + 6),
+                        new THREE.MeshBasicMaterial({color: color, wireframe: true})
+                    ),
+                    object3d: new THREE.Object3D()
+                }
+            },
+            values: {
+                value: {
+                    semiMajor: 0,
+                    semiMinor: 0,
+                    c: 0,
+                    color: color,
+                    e: 0,
+                    focus: [0, 0],
+                    m: 0,
+                    r: radius,
+                    theta: 0
+                }
+            },
+            x: {
+                get: function () {
+                    return this.store.object3d.position.x;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.store.object3d.position.x = value;
+                }
+            },
+            y: {
+                get: function () {
+                    return this.store.object3d.position.y;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.store.object3d.position.y = value;
+                }
+            },
+            z: {
+                get: function () {
+                    return this.store.object3d.position.z;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.store.object3d.position.z = value;
                 }
             }
         });
+        this.store.object3d.add(this.store.geometry);
         _OBJECTS[this.id] = this;
     }
+    CelestialII.prototype.add = function (object) {
+        if (object instanceof CelestialII)
+            this.store.object3d.add(object.store.geometry);
+        return this;
+    };
+    CelestialII.prototype.update = function (r) {
+        var p = this.values.semiMajor * (1 - Math.pow(this.values.e, 2)) / (1 + this.values.e * Math.cos(this.values.theta + r));
+        this.x = p * Math.cos(this.values.theta + r) + this.values.c;
+        this.z = p * Math.sin(this.values.theta + r);
+        this.values.theta += r; // Update theta to the new value
+        this.store.object3d.children.forEach(function (child) { // Update all children's rotation
+            child.rotation.y -= r;
+        });
+    }
+
+
+    // function Celestial (radius, color) {
+    //     Object.assign(this, new Sphere(radius, color));
+    //     this.color = color;
+    //     this.id = uid();
+    //     this.radius = radius;
+    //     Object.defineProperties(this, {
+    //         orbit: {
+    //             get: function () {
+    //                 return this.store.orbit;
+    //             },
+    //             set: function (value) {
+    //                 if (!this.store.orbit && value instanceof Orbit) {
+    //                     value.location.add(this.geometry);
+    //                     this.store.orbit = value;
+    //                     this.orbitEllipse = new OrbitalEllipse(value, this.color);
+    //                     this.orbitEllipse.hideFoci();
+    //                 }
+    //             }
+    //         },
+    //         store: {
+    //             value: {
+    //                 orbit: null
+    //             }
+    //         }
+    //     });
+    //     _OBJECTS[this.id] = this;
+    // }
     //  Planet  //
+    function getPlanetProperties (table, seed) {
+        return {type: 0, radius: 10, mass: round(5.1 * volume(10) / 1000, 2), color: 0xffffff}
+    }
     function Planet (properties) {
-        Celestial.call(this, properties.radius, properties.color);
+        CelestialII.call(this, properties.radius, properties.color);
         this.class = properties.type;
         this.mass = properties.mass;
     }
-    Planet.prototype = Object.create(Celestial.prototype);
+    Planet.prototype = Object.create(CelestialII.prototype);
     Planet.prototype.constructor = Planet;
 
     //  Star Object  //
@@ -366,7 +458,7 @@ var system,
         var t, r, m, c;
         t = c = propbability(table, parseInt(seed, 16) / 255);
         r = Math.round((parseInt(seed, 16) / 255) * 20 + (c ? 20 + (c + 3) : 30));
-        m = round(((parseInt(seed, 16) / 255) * 0.17 + 1.33) * volumeII(r) / 1000, 2);
+        m = round(((parseInt(seed, 16) / 255) * 0.17 + 1.33) * volume(r) / 1000, 2);
         if (c && _AGE >= 10 - c) {
             r = Math.round((parseInt(seed, 16) / 255) * (c !== 3 ? 20 : 3) + (c !== 3 ? 240 : 6));
             t = c === 3 ? 4 : c;
@@ -376,11 +468,12 @@ var system,
     }
     //  Star  //
     function Star (properties) {
-        Celestial.call(this, properties.radius, properties.color);
+        CelestialII.call(this, properties.radius, properties.color);
         this.class = properties.type;
         this.mass = properties.mass;
+        scene.add(this.store.object3d);
     }
-    Star.prototype = Object.create(Celestial.prototype);
+    Star.prototype = Object.create(CelestialII.prototype);
     Star.prototype.constructor = Star;
 
     //  System Objects  //
@@ -419,6 +512,9 @@ var system,
         this.iron = round(_SEED.parseSetRatio(0, 2) * 0.1 + 0.1, 2);
         this.name = _SEED.getSet(0, 2);
     }
+    System.prototype.pause = function () {
+        stop();
+    };
     //  Uniary System  //
     //  The UniarySystem constructor should create a new system with one star orbiting
     //  the system center
@@ -426,8 +522,12 @@ var system,
         System.call(this);
         this.A = new Star(getStarProperties(_PROB_ALPHA, _SEED.getSet(1, 2)));
         //  Set the orbit of the system to 0
-        this.A.orbit = new Orbit(0, 0, 0);
-        // createPlanets(this);
+        this.A.orbit = new OrbitII(0, 0, 0);
+        // this.a = new Planet(getPlanetProperties());
+        // this.a.orbit = new Orbit(this.A.radius + 100, this.A.radius + 90, 0);
+        // this.moon = new Planet({type: 0, radius: 2, mass: 4.2, color: 0xffffff});
+        // this.moon.orbit = new Orbit(25, 25, 0);
+        // this.a.orbit.location.add(this.moon.orbit.location);
     }
     UniarySystem.prototype = Object.create(System.prototype);
     UniarySystem.prototype.constructor = UniarySystem;
@@ -443,8 +543,8 @@ var system,
         //  Calculate the barrycenter and set the orbits of the binary system
         a = round(this.A.radius + this.B.radius + _SEED.parseSetRatio(1, 2) * 180 + 20, 2); // Distance
         b = round(a * (this.B.mass / (this.A.mass + this.B.mass)), 2) * -1; // Barrycenter
-        this.A.orbit = new Orbit(b, b * 0.9, 0);
-        this.B.orbit = new Orbit(a + b, (a + b) * 0.9, 0);
+        this.A.orbit = new OrbitII(b, b * 0.9, 0);
+        this.B.orbit = new OrbitII(a + b, (a + b) * 0.9, 0);
     }
     BinarySystem.prototype = Object.create(System.prototype);
     BinarySystem.prototype.constructor = BinarySystem;
@@ -456,14 +556,12 @@ var system,
         _AGE = round(_SEED.parseRatio(0) * 12 + 1.5, 2);
         // system = _SEED.parse(0) >= 4 ? new BinarySystem() : new UniarySystem();
         axis.hide();
+        system = new UniarySystem();
         //  Debugging
-        // system = new UniarySystem();
-        system = new BinarySystem();
         // describe(system);
         // describe(system.A);
         // if (system instanceof BinarySystem)
         //     describe(system.B);
-        
         // console.log('AGE: ', _AGE);
         
     }
