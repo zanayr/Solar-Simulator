@@ -1,15 +1,19 @@
 var system,
-    axis;
+    axis,
+    _OBJECTS = {},
+    planet;
 (function () {
     var _AGE,
         _FPS = 60,
-        _OBJECTS = {},
+        // _OBJECTS = {},
         _ORBITS = {},
         _PLANET_MAX = 9,
         _PLANET_MIN = 3,
         _SEED,
+        SEED,
+        
         _SPEED = 0.025,
-        _STAR_COLOR = [0xfd113c, 0xee0000, 0xf03412, 0xf04912, 0xe8601d, 0xf06b12, 0xfe9013, 0xffa500, 0xf3a214, 0xf3c220, 0xfade17, 0xf5d04c, 0xf5e54c, 0xf8ec81, 0xfff5c3, 0xfbf3b1, 0xfdfdd9, 0xffffff, 0xedeeff, 0xd4d6ff],
+        _STAR_COLOR = STAR_COLORS = [0xfd113c, 0xee0000, 0xf03412, 0xf04912, 0xe8601d, 0xf06b12, 0xfe9013, 0xffa500, 0xf3a214, 0xf3c220, 0xfade17, 0xf5d04c, 0xf5e54c, 0xf8ec81, 0xfff5c3, 0xfbf3b1, 0xfdfdd9, 0xffffff, 0xedeeff, 0xd4d6ff],
         _PROB_ALPHA = [50, 75, 90, 100], // M, K, G, A
         _PROB_BETA = [80, 90, 100], // M, K, G
         _PROB_PLANET = [25, 50, 75, 100], // M, T, N, J <-- fix probability 
@@ -37,13 +41,13 @@ var system,
         }
         return;
     }
-    function propbability (table, value) {
+    function probability (table, value) {
         var a = Math.round(100 * value),
             i;
         for (i = 0; i < table.length; i++)
             if (a <= table[i])
                 return i;
-        return 0;
+        return table.length;
     }
     function round (n, d) {
         var q = Math.pow(10, d || 2);
@@ -99,30 +103,30 @@ var system,
         for (i in points)
             geometry.vertices.push(new THREE.Vector3(points[i].x, 0, points[i].y));
         this.curve = new THREE.Line(geometry, new THREE.LineBasicMaterial({color: color}));
-        this.foci = [
-            new Line(new THREE.Vector3(-5, 0, 0), new THREE.Vector3(5, 0, 0), color),
-            new Line(new THREE.Vector3(0, 0, -5), new THREE.Vector3(0, 0, 5), color),
-            new Line(new THREE.Vector3(orbit.focus[0] * 2 - 5, 0, 0), new THREE.Vector3(orbit.focus[0] * 2 + 5, 0, 0), color),
-            new Line(new THREE.Vector3(orbit.focus[0] * 2, 0, -5), new THREE.Vector3(orbit.focus[0] * 2, 0, 5), color),
-        ];
-        scene.add(this.curve);
+        // this.foci = [
+        //     new Line(new THREE.Vector3(-5, 0, 0), new THREE.Vector3(5, 0, 0), color),
+        //     new Line(new THREE.Vector3(0, 0, -5), new THREE.Vector3(0, 0, 5), color),
+        //     new Line(new THREE.Vector3(orbit.focus[0] * 2 - 5, 0, 0), new THREE.Vector3(orbit.focus[0] * 2 + 5, 0, 0), color),
+        //     new Line(new THREE.Vector3(orbit.focus[0] * 2, 0, -5), new THREE.Vector3(orbit.focus[0] * 2, 0, 5), color),
+        // ];
+        // scene.add(this.curve);
     }
     OrbitalEllipse.prototype.hide = function () {
         this.curve.visible = false;
     };
-    OrbitalEllipse.prototype.hideFoci = function () {
-        this.foci.forEach(function (line) {
-            line.geometry.visible = false;
-        });
-    };
+    // OrbitalEllipse.prototype.hideFoci = function () {
+    //     this.foci.forEach(function (line) {
+    //         line.geometry.visible = false;
+    //     });
+    // };
     OrbitalEllipse.prototype.show = function () {
         this.curve.visible = true;
     };
-    OrbitalEllipse.prototype.showFoci = function () {
-        this.foci.forEach(function (line) {
-            line.geometry.visible = true;
-        });
-    };
+    // OrbitalEllipse.prototype.showFoci = function () {
+    //     this.foci.forEach(function (line) {
+    //         line.geometry.visible = true;
+    //     });
+    // };
 
     //  Sphere  //
     function Sphere (radius, color) {
@@ -345,10 +349,10 @@ var system,
             },
             store: {
                 value: {
-                    geometry: new THREE.Mesh(
-                        new THREE.SphereGeometry(radius, Math.floor(radius / 20) + 6, Math.floor(radius / 20) + 6),
-                        new THREE.MeshBasicMaterial({color: color, wireframe: true})
-                    ),
+                    // geometry: new THREE.Mesh(
+                    //     new THREE.SphereGeometry(radius, Math.floor(radius / 20) + 6, Math.floor(radius / 20) + 6),
+                    //     new THREE.MeshBasicMaterial({color: color, wireframe: true})
+                    // ),
                     object3d: new THREE.Object3D()
                 }
             },
@@ -396,9 +400,13 @@ var system,
         this.store.object3d.add(this.store.geometry);
         _OBJECTS[this.id] = this;
     }
-    CelestialII.prototype.add = function (object) {
-        if (object instanceof CelestialII)
+    CelestialII.prototype.add = function (object, orbit, name) {
+        if (object instanceof CelestialII) {
             this.store.object3d.add(object.store.geometry);
+            object.orbit = orbit;
+            this[name] = object;
+            this.store.object3d.add(object.orbitEllipse.curve);
+        }
         return this;
     };
     CelestialII.prototype.update = function (r) {
@@ -406,9 +414,9 @@ var system,
         this.x = p * Math.cos(this.values.theta + r) + this.values.c;
         this.z = p * Math.sin(this.values.theta + r);
         this.values.theta += r; // Update theta to the new value
-        this.store.object3d.children.forEach(function (child) { // Update all children's rotation
-            child.rotation.y -= r;
-        });
+        // this.store.object3d.children.forEach(function (child) { // Update all children's rotation
+        //     child.rotation.y -= r;
+        // });
     }
 
 
@@ -440,6 +448,15 @@ var system,
     //     _OBJECTS[this.id] = this;
     // }
     //  Planet  //
+    function Moon (properties) {
+        CelestialII.call(this, properties.radius, properties.color);
+        this.class = properties.type;
+        this.mass = properties.mass;
+    }
+    Moon.prototype = Object.create(CelestialII.prototype);
+    Moon.prototype.constructor = Moon;
+
+
     function getPlanetProperties (table, seed) {
         return {type: 0, radius: 10, mass: round(5.1 * volume(10) / 1000, 2), color: 0xffffff}
     }
@@ -471,7 +488,6 @@ var system,
         CelestialII.call(this, properties.radius, properties.color);
         this.class = properties.type;
         this.mass = properties.mass;
-        scene.add(this.store.object3d);
     }
     Star.prototype = Object.create(CelestialII.prototype);
     Star.prototype.constructor = Star;
@@ -512,8 +528,17 @@ var system,
         this.iron = round(_SEED.parseSetRatio(0, 2) * 0.1 + 0.1, 2);
         this.name = _SEED.getSet(0, 2);
     }
+    System.prototype.add = function (object, orbit, name) {
+        if (object instanceof CelestialII) {
+            scene.add(object.store.geometry);
+            object.orbit = orbit;
+            this[name] = object;
+        }
+        return this;
+    }
     System.prototype.pause = function () {
         stop();
+        return this;
     };
     //  Uniary System  //
     //  The UniarySystem constructor should create a new system with one star orbiting
@@ -523,11 +548,11 @@ var system,
         this.A = new Star(getStarProperties(_PROB_ALPHA, _SEED.getSet(1, 2)));
         //  Set the orbit of the system to 0
         this.A.orbit = new OrbitII(0, 0, 0);
-        // this.a = new Planet(getPlanetProperties());
-        // this.a.orbit = new Orbit(this.A.radius + 100, this.A.radius + 90, 0);
-        // this.moon = new Planet({type: 0, radius: 2, mass: 4.2, color: 0xffffff});
-        // this.moon.orbit = new Orbit(25, 25, 0);
-        // this.a.orbit.location.add(this.moon.orbit.location);
+        this.a = new Planet(getPlanetProperties());
+        this.a.orbit = new OrbitII(this.A.radius + 100, this.A.radius + 90, 0);
+        this.moon = new Moon({type: 0, radius: 5, mass: 4.2, color: 0x00ff00});
+        this.moon.orbit = new OrbitII(25, 25, 0);
+        this.a.add(this.moon);
     }
     UniarySystem.prototype = Object.create(System.prototype);
     UniarySystem.prototype.constructor = UniarySystem;
@@ -549,6 +574,90 @@ var system,
     BinarySystem.prototype = Object.create(System.prototype);
     BinarySystem.prototype.constructor = BinarySystem;
 
+    /* Notes:
+        
+    */
+    function StarII (type, radius, color) {
+        CelestialII.call(this);
+        this.class = type;
+        this.radius = round((parseInt(radius, 16) / 255) * 20 + (this.class ? 140 + ((this.class - 1) * 20) : 40), 2);
+        this.mass = round(parseInt(SEED.parseSetRatio(2, 2) * 0.17 + 1.33 * volume(this.radius) / 1000, 2));
+        console.log((parseInt(color, 16) % 4) + 4 * this.class);
+        this.color = STAR_COLORS[(parseInt(color, 16) % 4) + 4 * this.class];
+    }
+    StarII.prototype = Object.create(CelestialII.prototype);
+    StarII.prototype.constructor = StarII;
+    function SystemII () {
+        this.age = round(SEED.parseSetRatio(0, 2) * 12 + 1.5, 2);
+        this.position = new THREE.Vector3(0, 0, 0);
+        this.name = SEED.getSet(0, 4);
+    }
+    SystemII.prototype.add = function (object, name) {
+        if (object instanceof PlanetII) {
+            scene.add(object.store.object3d);
+            this[name] = object;
+        }
+    }
+    function age (s, a) {
+        //  s = star, a = age
+        var i = s.class,
+            v = i !== 3 ? 20 : 3,
+            m = i !== 3 ? 240 : 6;
+        if (i && a >= 10 - i) {
+            s.radius = round(SEED.parseSetRatio(0, 2) * v + m, 2);
+            s.class = i === 3 ? 4 : i;
+        }
+        return s;
+    }
+    function UniarySystemII (star) {
+        SystemII.call(this);
+        this.A = age(star, this.age);
+    }
+    UniarySystemII.prototype = Object.create(SystemII.prototype);
+    UniarySystemII.prototype.constructor = UniarySystemII;
+    function BinarySystemII (star1, star2) {
+        SystemII.call(this);
+        this.A = age(star1, this.age);
+        this.B = age(star2, this.age);
+    }
+    BinarySystemII.prototype = Object.create(SystemII.prototype);
+    BinarySystemII.prototype.constructor = BinarySystemII;
+    function createII () {
+        SEED = new Seed(Seed.create(), 32);
+        if (/*SEED.parse(0) >= 4*/ false) {
+            system = new BinarySystemII(
+                new StarII(
+                    probability([50, 75, 90], SEED.parseSetRatio(1, 2) * 100),
+                    SEED.getSet(1, 2),
+                    SEED.get(2)
+                ),
+                new StarII(
+                    probability([80, 90], SEED.parseSetRatio(2, 2) * 100),
+                    SEED.getSet(2, 2),
+                    SEED.get(3)
+                ),
+            );
+        } else {
+            system = new UniarySystemII(new StarII(
+                probability([50, 75, 90], SEED.parseSetRatio(1, 2) * 100),
+                SEED.getSet(1, 2),
+                SEED.get(2)
+            ));
+        }
+        // system.add(new Planet(SEED.getSet(8, 2), SEED.get(9)), 'a');
+        // system.a.add(new Moon(SEED.getSet(16, 2), SEED.get(17)));
+        // axis.hide();
+    }
+    function build () {
+        var o;
+        for (o in _OBJECTS) {
+            o.geometry = new THREE.Mesh(
+                new THREE.SphereGeometry(o.radius, 13, 13),
+                new THREE.MeshBasicMaterial({color: o.color, wireframe: true})
+            );
+            scene.add(o.geometry);
+        }
+    }
     //  Build Functions  //
     //  The create function should create a new system and planets
     function create () {
@@ -556,7 +665,24 @@ var system,
         _AGE = round(_SEED.parseRatio(0) * 12 + 1.5, 2);
         // system = _SEED.parse(0) >= 4 ? new BinarySystem() : new UniarySystem();
         axis.hide();
-        system = new UniarySystem();
+        system = new System();
+        system.add(
+            new Star(getStarProperties(_PROB_ALPHA, _SEED.getSet(1, 2))),
+            new OrbitII(0, 0, 0),
+            'A'
+        );
+        planet = new Planet({type: 0, radius: 10, mass: 10, color: 0x0000ff});
+        system.add(
+            planet,
+            new OrbitII(system.A.radius + 100, system.A.radius + 90, 0),
+            'a'
+        );
+        system.a.add(
+            new Moon({type: 0, radius: 5, mass: 5, color: 0xffffff}),
+            new OrbitII(system.a.radius + 10, system.a.radius + 10, 0),
+            'a'
+        );
+
         //  Debugging
         // describe(system);
         // describe(system.A);
@@ -585,8 +711,10 @@ var system,
         //  Build Environment
         axis = new Axis();
         //  Create system seed and new system object
-        create();
+        createII();
+        // build();
     }
     init(); // Initialize environment
-    start(); // Start system
+    // start(); // Start system
+    renderer.render(scene, camera);
 }());
