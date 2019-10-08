@@ -8,10 +8,7 @@
     [28, 32]    Features (Rings, Asteroids, etc.)
 
     Last:
-    Just figured out how to position moons around their planets, I think next I need to
-    make the planets have a "children" object to iterate over and update.
-    Concerning the ellipses, they will now need ot be updated as well, perhaps I can
-    add a "tracer" effect as well
+    
 */
 var system,
     OBJECTS;
@@ -95,6 +92,51 @@ var system,
         return this.uuids.includes(uuid);
     };
 
+    //  Collection  //
+    function Collection () {
+        Object.defineProperties(this, {
+            store: {
+                value: [],
+                writable: true
+            },
+            length: {
+                get: function () {
+                    return this.store.length;
+                }
+            },
+            uuids: {
+                get: function () {
+                    this.store.slice(0);
+                }
+            }
+        });
+    }
+    Collection.prototype.add = function (object) {
+        if (!this.store.includes(object.uuid))
+            this.store = this.store.concat(object.uuid);
+        return this.length;
+    };
+    Collection.prototype.remove = function (uuid) {
+        if (this.store.includes(uuid)) {
+            this.store = this.store.filter(function (id) {
+                return uuid !== id;
+            });
+            return true;
+        }
+        return false;
+    };
+    Collection.prototype.each = function (fn) {
+        var i;
+        for (i = 0, len = this.length; i < len; i++)
+            fn.apply(null, [OBJECTS.get(this.store[i]), i]);
+        return this;
+    };
+    Collection.prototype.get = function (uuid) {
+        if (this.store.includes(uuid))
+            return OBJECTS.get(uuid);
+        return null;
+    };
+
 
     //  Loop  //
     function update (step) {
@@ -142,7 +184,7 @@ var system,
             loop.fts++;
             //  Update Elements
             while (loop.delta >= loop.timestep) {
-                update(360 / loop.timestep * 0.01);
+                update(360 / loop.timestep);
                 loop.delta -= loop.timestep;
                 cycles++;
                 if (cycles >= 240) {
@@ -232,14 +274,24 @@ var system,
         this.line.visible = true;
     };
     
+
     //  Celestial  //
     function Celestial () {
+        this.satellites = new Collection();
         this.uuid = uuid();
         Object.defineProperties(this, {
+            prime: {
+                get: function () {
+                    if (this.store.primeUuid)
+                        return OBJECTS.get(this.store.primeUuid);
+                    return {x: 0, y: 0, z: 0};
+                }
+            },
             store: {
                 value: {
                     mesh: null,
-                    object: new THREE.Object3D()
+                    object: new THREE.Object3D(),
+                    primeUuid: null
                 }
             },
             values: {
@@ -276,6 +328,10 @@ var system,
         OBJECTS.add(this);
         scene.add(this.store.object);
     }
+    Celestial.prototype.add = function (satellite) {
+        this.satellites.add(satellite.setPrime(this));
+        return this;
+    };
     Celestial.prototype.setMesh = function (mesh) {
         if (!this.store.mesh && mesh instanceof THREE.Mesh) {
             this.store.object.add(mesh);
@@ -291,38 +347,37 @@ var system,
         this.values.e = e;
         this.values.focus = [e * a, e * a * -1];
         this.values.theta = theta;
+        this.values.v = this instanceof Star ? 0.005 : Math.abs(1 / b) * 2;
+        return this;
+    };
+    Celestial.prototype.setPrime = function (prime) {
+        if (this.store.primeUuid)
+            this.satellites.remove(this.uuid);
+        this.store.primeUuid = prime.uuid;
         return this;
     };
     Celestial.prototype.update = function (radians) {
-        var r = this.values.theta + radians,
+        var r = this.values.theta + (radians * this.values.v),
             p = this.values.semiMajorAxis * (1 - Math.pow(this.values.e, 2)) / (1 + this.values.e * Math.cos(r));
-        if (this.store.parentId) {
-            this.x = p * Math.cos(r * 50) + this.values.c + this.parent.x;
-            this.z = p * Math.sin(r * 50) + this.parent.z;
-        } else {
-            this.x = p * Math.cos(r) + this.values.c;
-            this.z = p * Math.sin(r);
-        }
+        this.x = p * Math.cos(r) + this.values.c + this.prime.x;
+        this.z = p * Math.sin(r) + this.prime.z;
         // <-- Set rotation here
         this.values.theta = r;
     };
 
-    function Moon (c, radius, mass) {
+    //  Satellite  //
+    function Satellite (c, radius, mass) {
         Celestial.call(this);
         this.class = c;
         this.radius = 5;
         this.mass = 5;
         this.store.radiusSeed = radius;
         this.store.massSeed = mass;
-        Object.defineProperty(this, 'parent', {
-            get: function () {
-                return OBJECTS.get(this.store.parentId);
-            }
-        });
     }
-    Moon.prototype = Object.create(Celestial.prototype);
-    Moon.prototype.constructor = Moon;
+    Satellite.prototype = Object.create(Celestial.prototype);
+    Satellite.prototype.constructor = Satellite;
 
+    //  Planet  //
     function Planet (c, radius, mass) {
         Celestial.call(this);
         this.class = c;
@@ -333,11 +388,6 @@ var system,
     }
     Planet.prototype = Object.create(Celestial.prototype);
     Planet.prototype.constructor = Planet;
-    Planet.prototype.add = function (object) {
-        if (object instanceof Moon)
-            object.store.parentId = this.uuid;
-        return this;
-    }
 
     //  Star  //
     function Star (c, radius, mass) {
@@ -416,21 +466,20 @@ var system,
         return sys;
     }
 
-
+    
     //  Initialization Functions  //
     function create () {
         var planet, moon;
         SEED = new Seed32(Seed32.create());
         system = SEED.parseSetRatio(1) > 0.4 ? binary() : uniary();
         planet = new Planet(parse([20, 40, 60, 80], SEED.parseSetRatio(12)), SEED.getSet(13), SEED.getSet(14));
-        system.add(planet, 'a');
-        planet.setOrbit(500, 440, Math.random() * 360);
-        moon = new Moon(parse([20, 40, 60, 80], SEED.parseSetRatio(20)), SEED.getSet(21), SEED.getSet(22));
+        system.A.add(planet);
+        planet.setOrbit(100, 100, Math.random() * 360);
+        moon = new Satellite(parse([20, 40, 60, 80], SEED.parseSetRatio(20)), SEED.getSet(21), SEED.getSet(22));
         planet.add(moon);
         moon.setOrbit(20, 20, Math.random() * 360);
     }
     function build () {
-        console.log(system);
         OBJECTS.each(function (object) {
             var u = v = Math.floor(object.radius / 20 + 6);
                 g = new THREE.SphereGeometry(object.radius, u, v),
@@ -441,7 +490,6 @@ var system,
                 color: 0xffffff,//COLORS[(parseInt(object.store.colorSeed, 16) % 4) + 4 * c],
                 wireframe: true
             })));
-            console.log(object);
             object.orbitEllipse = new OrbitEllipse(object.values.semiMajorAxis, object.values.semiMinorAxis, object.values.focus[0]);
             scene.add(object.orbitEllipse.line);
         });
