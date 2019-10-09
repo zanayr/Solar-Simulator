@@ -1,5 +1,5 @@
 /*  NOTES:
-    Seed Map:
+    Seed32 Map:
     [0, 3]      System
     [4, 7]      Alpha Star
     [8, 11]     Beta Star
@@ -28,6 +28,9 @@ var system,
             if (v <= table[i])
                 return i;
         return len;
+    }
+    function radian (degree) {
+        return degree * (Math.PI / 180);
     }
     function round (number, decimals) {
         var q = Math.pow(10, decimals || 2);
@@ -71,7 +74,15 @@ var system,
         return false;
     };
     Store.prototype.delete = function (uuid) {
+        var object;
         if (this.has(uuid)) {
+            object = this.store[uuid];
+            object.satellites.each(function (satellite) {
+                satellite.store.primeUuid = null;
+            });
+            scene.remove(scene.getObjectByName(uuid));
+            // object.object.geometry.dispose();
+            // object.object.materials.dispose();
             delete this.store[uuid];
             return true;
         }
@@ -114,7 +125,7 @@ var system,
     Collection.prototype.add = function (object) {
         if (!this.store.includes(object.uuid))
             this.store = this.store.concat(object.uuid);
-        return this.length;
+        return object.uuid;
     };
     Collection.prototype.remove = function (uuid) {
         if (this.store.includes(uuid)) {
@@ -140,9 +151,12 @@ var system,
 
     //  Loop  //
     function update (step) {
-        OBJECTS.each(function (object) {
-            object.update(step * (Math.PI / 180));
-        });
+        var i, len;
+        for (i = 0, len = loop.updates.length; i < len; i++)
+            loop.updates[i](radian(step));
+        // OBJECTS.each(function (object) {
+        //     object.update(step * (Math.PI / 180));
+        // });
     }
     function render (interpolation) {
         renderer.render(scene, camera);
@@ -184,7 +198,7 @@ var system,
             loop.fts++;
             //  Update Elements
             while (loop.delta >= loop.timestep) {
-                update(360 / loop.timestep);
+                update(360 / loop.timestep * 0.01);
                 loop.delta -= loop.timestep;
                 cycles++;
                 if (cycles >= 240) {
@@ -212,12 +226,63 @@ var system,
                 get: function () {
                     return 1000 / this.maxFps;
                 }
+            },
+            updates: {
+                value: [],
+                writable: true
             }
         });
     }
+    InterpolatedLoop.prototype.add = function (update) {
+        if (!this.state) {
+            this.updates.push(update);
+        }
+    };
     
-    //  Seed  //
+    //  Seed32  //
+    function Seed () {
+        this.value = null;
+    }
+    Seed.prototype.get = function (index) {
+        return this.value[index % 32];
+    };
+    Seed.prototype.parse = function (index) {
+        return parseInt(this.value[index % 32], 16);
+    };
+    Seed.prototype.parseRatio = function (index) {
+        return parseInt(this.value[index % 32], 16) / 15;
+    };
+    Seed.prototype.getSet = function (index, len) {
+        var l = len ? len : 2;
+        if (index + l >= this.value.length)
+            return this.value.slice(index, this.value.length) + this.getSet(0, index + l - this.value.length);
+        return this.value.slice(index, index + l);
+    };
+    Seed.prototype.parseSet = function (index, len) {
+        var l = len ? len : 2;
+        return parseInt(this.getSet(index, l), 16);
+    };
+    Seed.prototype.parseSetRatio = function (index, len) {
+        var l = len ? len : 2;
+        return this.parseSet(index, l) / (Math.pow(16, l) - 1);
+    };
+    function Seed4 (str) {
+        Seed.call(this);
+        this.value = str.replace(/\s/, '')
+            .slice(0, 4)
+            .replace(/[\da-z]/ig, function (c) {
+                return (c.charCodeAt(0) % 16).toString(16);
+            });
+    }
+    Seed4.prototype = Object.create(Seed.prototype);
+    Seed4.prototype.constructor = Seed4;
+    Seed4.create = function () {
+        return (''.padStart(4, 'x')).replace(/x/g, function () {
+            return String.fromCharCode(Math.round(Math.random() * 25) + (Math.random() > 0.5 ? 97 : 65));
+        });
+    };
     function Seed32 (str) {
+        Seed.call(this);
         this.value = (function () {
             var s = str.replace(/\s/, '');
             while (s.length < 32)
@@ -227,271 +292,361 @@ var system,
             return (c.charCodeAt(0) % 16).toString(16);
         });
     }
-    Seed32.prototype.get = function (index) {
-        return this.value[index % 32];
-    };
-    Seed32.prototype.parse = function (index) {
-        return parseInt(this.value[index % 32], 16);
-    };
-    Seed32.prototype.parseRatio = function (index) {
-        return parseInt(this.value[index % 32], 16) / 15;
-    };
-    Seed32.prototype.getSet = function (index, len) {
-        var l = len ? len : 2;
-        if (index + l >= this.value.length)
-            return this.value.slice(index, this.value.length) + this.getSet(0, index + l - this.value.length);
-        return this.value.slice(index, index + l);
-    };
-    Seed32.prototype.parseSet = function (index, len) {
-        var l = len ? len : 2;
-        return parseInt(this.getSet(index, l), 16);
-    };
-    Seed32.prototype.parseSetRatio = function (index, len) {
-        var l = len ? len : 2;
-        return this.parseSet(index, l) / (Math.pow(16, l) - 1);
-    };
     Seed32.create = function () {
-        return ('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx').replace(/x/g, function () {
+        return (''.padStart(32, 'x')).replace(/x/g, function () {
             return String.fromCharCode(Math.round(Math.random() * 25) + (Math.random() > 0.5 ? 97 : 65));
         });
     };
-
+    Seed32.prototype = Object.create(Seed.prototype);
+    Seed32.prototype.constructor = Seed32;
     //  Orbit Ellipse  //
-    function OrbitEllipse (a, b, f) {
-        var curve = new THREE.EllipseCurve(f, 0, a, b, 0, 2 * Math.PI, false, 0),
-            points = curve.getPoints(Math.abs(Math.floor(a))),
-            geometry = new THREE.Geometry(),
-            p;
-        for (p in points)
-            geometry.vertices.push(new THREE.Vector3(points[p].x, 0, points[p].y));
-        this.line = new THREE.Line(geometry, new THREE.LineBasicMaterial({color: 0xffffff}));
-        this.line.visible = false;
+    function ellipse (x, a, b) {
+        var c = new THREE.EllipseCurve(x, 0, a, b, 0, 2 * Math.PI, false, 0),
+            p = c.getPoints(Math.abs(Math.floor(a))),
+            g = new THREE.Geometry(),
+            i;
+        for (i in p)
+            g.vertices.push(new THREE.Vector3(p[i].x, 0, p[i].y));
+        return new THREE.Line(g, new THREE.LineBasicMaterial({color: 0xffffff}));
     }
-    OrbitEllipse.prototype.hide = function () {
-        this.line.visible = false;
-    };
-    OrbitEllipse.prototype.show = function () {
-        this.line.visible = true;
-    };
-    
+    function focus () {
+        var g1 = new THREE.Geometry(),
+            g2 = new THREE.Geometry();
+        g1.vertices.push(new THREE.Vector3(-5, 0, 0));
+        g1.vertices.push(new THREE.Vector3(5, 0, 0));
+        g2.vertices.push(new THREE.Vector3(0, 0, -5));
+        g2.vertices.push(new THREE.Vector3(0, 0, 5));
+        return [new THREE.Line(g1, new THREE.LineBasicMaterial({color: 0xffffff})), new THREE.Line(g2, new THREE.LineBasicMaterial({color: 0xffffff}))];
+    }
 
-    //  Celestial  //
     function Celestial () {
-        this.satellites = new Collection();
+        this.object = new THREE.Object3D();
         this.uuid = uuid();
         Object.defineProperties(this, {
+            polar: {
+                get: function () {
+                    return this.values.semiMajorAxis * (1 - Math.pow(this.values.e, 2)) / (1 + this.values.e * Math.cos(this.theta));
+                }
+            },
+            R: {
+                get: function () {
+                    return this.values.R;
+                }
+            },
             prime: {
                 get: function () {
-                    if (this.store.primeUuid)
-                        return OBJECTS.get(this.store.primeUuid);
-                    return {x: 0, y: 0, z: 0};
+                    return OBJECTS.get(this.store.primeUuid);
+                },
+                set: function (value) {
+                    if (value instanceof Celestial) {
+                        if (this.store.primeUuid)
+                            this.prime.remove(this);
+                        this.store.primeUuid = value.uuid;
+                    }
+                    return value;
                 }
             },
             store: {
-                value: {
-                    mesh: null,
-                    object: new THREE.Object3D(),
-                    primeUuid: null
-                }
-            },
-            values: {
                 value: {}
             },
-            x: {
+            theta: {
                 get: function () {
-                    return this.store.object.position.x;
+                    return this.values.theta;
                 },
                 set: function (value) {
                     if (typeof value === 'number' && isFinite(value))
-                        this.store.object.position.x = value;
+                        this.values.theta = value;
+                }
+            },
+            values: {
+                value: {
+                    e: 0,
+                    R: 0,
+                    semiMajorAxis: 0,
+                    theta: 0,
+                    velocity: 0
+                }
+            },
+            velocity: {
+                get: function () {
+                    return this.values.velocity;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value) && value > 1)
+                        this.values.velocity = value;
+                }
+            },
+            x: {
+                get: function () {
+                    return this.object.position.x;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.object.position.x = value;
                 }
             },
             y: {
                 get: function () {
-                    return this.store.object.position.y;
+                    return this.object.position.y;
                 },
                 set: function (value) {
                     if (typeof value === 'number' && isFinite(value))
-                        this.store.object.position.y = value;
+                        this.object.position.y = value;
                 }
             },
             z: {
                 get: function () {
-                    return this.store.object.position.z;
+                    return this.object.position.z;
                 },
                 set: function (value) {
                     if (typeof value === 'number' && isFinite(value))
-                        this.store.object.position.z = value;
+                        this.object.position.z = value;
                 }
             }
         });
         OBJECTS.add(this);
-        scene.add(this.store.object);
-    }
-    Celestial.prototype.add = function (satellite) {
-        this.satellites.add(satellite.setPrime(this));
-        return this;
     };
     Celestial.prototype.setMesh = function (mesh) {
-        if (!this.store.mesh && mesh instanceof THREE.Mesh) {
-            this.store.object.add(mesh);
-            this.store.mesh = mesh;
+        if (mesh instanceof THREE.Mesh) {
+            this.mesh = mesh;
+            this.object.add(mesh);
         }
         return this;
-    };
-    Celestial.prototype.setOrbit = function (a, b, theta) {
+    }
+    Celestial.prototype.setOrbit = function (a, b, theta, v) {
         var e = a !== b ? Math.sqrt(1 - (Math.pow(b, 2) / Math.pow(a, 2))) : 0;
-        this.values.semiMajorAxis = a;
-        this.values.semiMinorAxis = b;
-        this.values.c = 2 * e * a;
-        this.values.e = e;
-        this.values.focus = [e * a, e * a * -1];
-        this.values.theta = theta;
-        this.values.v = this instanceof Star ? 0.005 : Math.abs(1 / b) * 2;
-        return this;
-    };
-    Celestial.prototype.setPrime = function (prime) {
-        if (this.store.primeUuid)
-            this.satellites.remove(this.uuid);
-        this.store.primeUuid = prime.uuid;
+        console.log(this);
+        Object.assign(this.values, {
+            e: e,
+            F: e * a,
+            R: 2 * e * a,
+            semiMajorAxis: a,
+            semiMinorAxis: b,
+            theta: theta,
+            velocity: v || 1
+        });
+        loop.add(this.update.bind(this));
         return this;
     };
     Celestial.prototype.update = function (radians) {
-        var r = this.values.theta + (radians * this.values.v),
-            p = this.values.semiMajorAxis * (1 - Math.pow(this.values.e, 2)) / (1 + this.values.e * Math.cos(r));
-        this.x = p * Math.cos(r) + this.values.c + this.prime.x;
-        this.z = p * Math.sin(r) + this.prime.z;
-        // <-- Set rotation here
-        this.values.theta = r;
+        this.theta += radians * this.velocity;
+        this.x = this.polar * Math.cos(this.theta) + this.R;
+        this.z = this.polar * Math.sin(this.theta);
+        return this;
     };
 
-    //  Satellite  //
-    function Satellite (c, radius, mass) {
+    function Satellite (seed) {
         Celestial.call(this);
-        this.class = c;
-        this.radius = 5;
-        this.mass = 5;
-        this.store.radiusSeed = radius;
-        this.store.massSeed = mass;
+        this.class = 0;
+        this.radius = 2;
+        this.mass = 10;
+        this.seed = seed;
     }
     Satellite.prototype = Object.create(Celestial.prototype);
     Satellite.prototype.constructor = Satellite;
 
-    //  Planet  //
-    function Planet (c, radius, mass) {
+
+    function Planet (seed) {
         Celestial.call(this);
-        this.class = c;
-        this.radius = 10;
-        this.mass = 10;
-        this.store.radiusSeed = radius;
-        this.store.massSeed = mass;
+        this.class = parse([
+            Math.round((200 * system.iron) - 10),
+            Math.round((500 * system.iron) - 30),
+            Math.round((300 * system.iron) + 30)
+        ], seed.parseSetRatio(0));
+        this.radius = round(seed.parseSetRatio(1) * (this.class !== 3 ? 2 : 4) + (3 * this.class + 2));
+        this.mass = round(seed.parseSetRatio(2) + (this.class > 1 ? 4.5 : 4 - this.class) * volume(this.radius) / 10000);
+        this.satellites = new Collection();
+        this.seed = seed;
     }
     Planet.prototype = Object.create(Celestial.prototype);
     Planet.prototype.constructor = Planet;
+    Planet.prototype.addSatellite = function (satellite, label) {
+        if (!satellite.prime && satellite instanceof Satellite) {
+            satellite.prime = this;
+            this.satellites.add(satellite);
+            this.object.add(satellite.object);
+            Object.defineProperty(this, label, {
+                get: function () {
+                    return OBJECTS.get(this[label + 'Uuid']);
+                }
+            });
+            Object.defineProperty(this.store, label + 'Uuid', {
+                value: object.uuid
+            });
+        }
+        return this;
+    };
+    Planet.prototype = Object.create(Celestial.prototype);
+    Planet.prototype.constructor = Planet;
 
-    //  Star  //
-    function Star (c, radius, mass) {
+
+    function Star (seed) {
         Celestial.call(this);
-        this.class = c;
-        this.radius = round(parseInt(radius, 16) / 255 * 20 + (c ? 140 + (c - 1) * 20 : 40));
-        this.mass = round((parseInt(mass, 16) / 255 * 0.17 + 1.33) * volume(this.radius) / 10000);
-        this.store.radiusSeed = radius;
-        this.store.massSeed = mass;
+        this.planets = new Collection();
+        if (seed.parse(0) > 7)
+            (function (star, s) {
+                var i, j, p;
+                for (i = 0, j = (s.parse(1) % 2) + 1; i < j; i++) {
+                    p = new Planet(new Seed4(SEED.getSet(10 + i, 4)));
+                    p.prime = star;
+                    star.planets.add(p);
+                    star.object.add(p.object);
+                }
+            } (this, seed));
     }
     Star.prototype = Object.create(Celestial.prototype);
     Star.prototype.constructor = Star;
-
-    //  System  //
+    function Alpha (seed) {
+        Star.call(this, seed);
+        this.class = parse([
+            Math.round(150 - (100 * system.hydrogen)),
+            Math.round(175 - (100 * system.hydrogen)),
+            Math.round(190 - (100 * system.hydrogen))
+        ], seed.parseSetRatio(0));
+        this.radius = round(seed.parseSetRatio(1) * 20 + (this.class ? 140 + (this.class - 1) * 20 : 40));
+        this.mass = round((seed.parseSetRatio(2) * (system.hydrogen - 0.83) + 1.33) * volume(this.radius) / 10000);
+        this.seed = seed;
+    }
+    Alpha.prototype = Object.create(Star.prototype);
+    Alpha.prototype.constructor = Alpha;
+    function Beta (seed) {
+        Star.call(this, seed);
+        this.class = parse([
+            Math.round(130 - (50 * system.hydrogen)),
+            Math.round(140 - (50 * system.hydrogen))
+        ], seed.parseSetRatio(0));
+        this.radius = round(seed.parseSetRatio(1) * 20 + (this.class ? 140 + (this.class - 1) * 20 : 40));
+        this.mass = round((seed.parseSetRatio(2) * (system.hydrogen - 0.83) + 1.33) * volume(this.radius) / 10000);
+        this.seed = seed;
+    }
+    Beta.prototype = Object.create(Star.prototype);
+    Beta.prototype.constructor = Beta;
     function System () {
         this.age = round(SEED.parseSetRatio(0) * 12 + 1.8);
-        this.binary = SEED.parseSetRatio(1) > 0.4;
+        this.binary = SEED.parse(1) > 3;
+        this.hydrogen = round(SEED.parseSetRatio(1) * 0.2 + 0.9);
+        this.iron = round(SEED.parseSetRatio(2) * 0.1 + 0.1);
         this.name = SEED.getSet(0);
+        this.objects = new Collection();
         Object.defineProperty(this, 'store', {
             value: {}
         });
     }
-    System.prototype.add = function (object, name) {
-        if (object instanceof Star) {
-            (function () {
-                var i = object.class,
-                    v = i !== 3 ? 20 : 3,
-                    m = i !== 3 ? 240 : 6;
-                if (i && this.age >= 10 - i) {
-                    object.radius = round(parseInt(object.store.radiusSeed, 16) / 255 * v + m, 2);
-                    object.class = i === 3 ? 5 : 4;
+    System.prototype.addObject = function (object, label) {
+        if (object !== null) {
+            object.primeUiid = null;
+            this.objects.add(object);
+            scene.add(object.object);
+            Object.defineProperty(this, label, {
+                get: function () {
+                    return OBJECTS.get(this.store[label + 'Uuid']);
                 }
-            }());
+            });
+            Object.defineProperty(this.store, label + 'Uuid', {
+                value: object.uuid
+            });
         }
-        Object.defineProperty(this, name, {
-            get: function () {
-                return OBJECTS.get(this.store[name + 'Id']);
-            }
-        });
-        Object.defineProperty(this.store, name + 'Id', {
-            value: object.uuid
-        });
+        return this;
     };
     System.prototype.pause = function () {
         stop();
     };
-    System.prototype.showOrbits = function () {
+    System.prototype.toggleOrbits = function () {
         OBJECTS.each(function (object) {
-            object.orbitEllipse.show();
-        });
-    };
-    System.prototype.hideOrbits = function () {
-        OBJECTS.each(function (object) {
-            object.orbitEllipse.hide();
+            object.ellipse.visible = !object.ellipse.visible;
         });
     };
 
-    //  Uniary and Binary Functions  //
+    function age (star) {
+        var i = star.class,
+            v = i !== 3 ? 20 : 3,
+            m = i !== 3 ? 240 : 6;
+        if (i && this.age >= 10 - i) {
+            star.radius = round(parseInt(star.store.seed.slice(1, 2), 16) / 255 * v + m, 2);
+            star.class = i === 3 ? 5 : 4;
+        }
+        return star;
+    }
     function uniary () {
-        var sys = new System();
-        sys.add(new Star(parse([50, 75, 90], SEED.parseSetRatio(4)), SEED.getSet(5), SEED.getSet(6)), 'A');
-        sys.A.setOrbit(0, 0, 0);
-        return sys;
+        var last = 10,
+            alpha = age(new Alpha(new Seed4(SEED.getSet(0, 4))));
+        system.addObject(alpha.setOrbit(0, 0, 0, 0), 'A');
+        //  Set cthonic planet orbits
+        system.A.planets.each(function (cthonian, i) {
+            var e = round(0.00133 * SEED.parse(10 + i)) + 0.98;
+            last = cthonian.radius / 2 + last + (10 * i);
+            cthonian.setOrbit(last + system.A.radius, (last + system.A.radius) * e, radian(Math.random() * 360), 3 - i);
+        });
     }
     function binary () {
-        var s1, s2, a, b, sys = new System();
-        s1 = new Star(parse([50, 75, 90], SEED.parseSetRatio(4)), SEED.getSet(5), SEED.getSet(6));
-        s2 = new Star(parse([80, 90], SEED.parseSetRatio(8)), SEED.getSet(9), SEED.getSet(10));
-        sys.add(s1.mass >= s2.mass ? s1 : s2, 'A');
-        console.log(sys.A);
-        sys.add(sys.A.uuid === s1.uuid ? s2 : s1, 'B');
-        a = round(sys.A.radius + sys.B.radius + SEED.parseSetRatio(2) * 180 + 20);
-        b = round(a * (sys.B.mass / (sys.A.mass + sys.B.mass)), 2) * -1; // Barrycenter
-        sys.A.setOrbit(b, b * 0.98, 0);
-        sys.B.setOrbit(a + b, (a + b) * 0.98, 0);
-        return sys;
+        var s1, s2, a, b, last = 10;
+        s1 = age(new Alpha(new Seed4(SEED.getSet(0, 4))));
+        s2 = age(new Beta(new Seed4(SEED.getSet(4, 4))));
+        system.addObject(s1.mass >= s2.mass ? s1 : s2, 'A');
+        system.addObject(system.A.uuid === s1.uuid ? s2 : s1, 'B');
+        //  Set binary orbit
+        a = round(s1.radius + s2.radius + SEED.parseSetRatio(0) * 150 + 50);
+        b = round(a * (s2.mass / (s1.mass + s2.mass)), 2) * -1; // Barrycenter
+        system.A.setOrbit(b, b * (round(0.00133 * SEED.parse(1)) + 0.98), 0, 0.5);
+        system.B.setOrbit(a + b, (a + b) * (round(0.00133 * SEED.parse(1)) + 0.98), 0, 0.5);
+        //  Set cthonic planet orbits
+        system.A.planets.each(function (cthonian, i) {
+            var e = round(0.00133 * SEED.parse(10 + i)) + 0.98;
+            last = cthonian.radius / 2 + last + (10 * i);
+            cthonian.setOrbit(last + system.A.radius, (last + system.A.radius) * e, radian(Math.random() * 360), 3 - i);
+        });
+        system.B.planets.each(function (cthonian, i) {
+            var e = round(0.00133 * SEED.parse(10 + i)) + 0.98;
+            last = cthonian.radius / 2 + last + (10 * i);
+            cthonian.setOrbit(last + system.B.radius, (last + system.B.radius) * e, radian(Math.random() * 360), 3 - i);
+        });
     }
 
     
     //  Initialization Functions  //
     function create () {
         var planet, moon;
-        SEED = new Seed32(Seed32.create());
-        system = SEED.parseSetRatio(1) > 0.4 ? binary() : uniary();
-        planet = new Planet(parse([20, 40, 60, 80], SEED.parseSetRatio(12)), SEED.getSet(13), SEED.getSet(14));
-        system.A.add(planet);
-        planet.setOrbit(100, 100, Math.random() * 360);
-        moon = new Satellite(parse([20, 40, 60, 80], SEED.parseSetRatio(20)), SEED.getSet(21), SEED.getSet(22));
-        planet.add(moon);
-        moon.setOrbit(20, 20, Math.random() * 360);
+        SEED = new Seed32(Seed32.create(32));
+        system = new System();
+        if (system.binary) {
+            binary();
+        } else {
+            uniary();
+        }
+        planet = new Planet(new Seed4(SEED.getSet(12, 4)));
+        system.addObject(planet.setOrbit(system.B ? system.B.values.semiMajorAxis * 3 : 300, (system.B ? system.B.values.semiMinorAxis * 3 : 300) * (round(0.0066 * SEED.parse(12)) + 0.9), radian(Math.random() * 360), 1), 'a');
+        moon = new Satellite(new Seed4(SEED.getSet(20, 4)));
+        planet.addSatellite(moon.setOrbit(25, 25 * (round(0.00133 * SEED.parse(12)) + 0.98), radian(Math.random() * 360), 2), 'a1');
+        // var planet, moon;
+        // SEED = new Seed32(Seed32.create(32), 32);
+        // system = new System();
+        // // uniary();
+        // system.binary ? binary() : uniary();
+        // system.add(new Planet('a', SEED.getSet(12, 4)), 'a');
+        // system.a.setOrbit(300, 300, Math.random() * 360);
+        // system.a.add(new Satellite(parse([20, 40, 60, 80], SEED.parseSetRatio(20)), SEED.getSet(21), SEED.getSet(22)), 'a1');
+        // system.a.a1.setOrbit(50, 50, Math.random() * 360);
     }
     function build () {
         OBJECTS.each(function (object) {
             var u = v = Math.floor(object.radius / 20 + 6);
                 g = new THREE.SphereGeometry(object.radius, u, v),
-                c = 0;
-            if (object instanceof Star)
                 c = object.class;
             object.setMesh(new THREE.Mesh(g, new THREE.MeshBasicMaterial({
                 color: 0xffffff,//COLORS[(parseInt(object.store.colorSeed, 16) % 4) + 4 * c],
                 wireframe: true
             })));
-            object.orbitEllipse = new OrbitEllipse(object.values.semiMajorAxis, object.values.semiMinorAxis, object.values.focus[0]);
-            scene.add(object.orbitEllipse.line);
+            object.ellipse = ellipse(object.values.F, object.values.semiMajorAxis, object.values.semiMinorAxis);
+            object.focus = focus(object.values.F);
+            if (object.store.primeUuid) {
+                object.prime.object.add(object.ellipse);
+                object.prime.object.add(object.focus[0]);
+                object.prime.object.add(object.focus[1]);
+            } else {
+                scene.add(object.ellipse);
+                scene.add(object.focus[0]);
+                scene.add(object.focus[1]);
+            }
         });
     }
     function init () {
@@ -500,7 +655,7 @@ var system,
         camera = new THREE.PerspectiveCamera(35, canvas.width() / canvas.height(), 1, 20000);
         renderer = new THREE.WebGLRenderer();
 
-        camera.position.set(1300, 1300, 1300);
+        camera.position.set(1200, 1200, 1200);
         camera.lookAt(scene.position);
 
         renderer.setSize(canvas.width(), canvas.height());
