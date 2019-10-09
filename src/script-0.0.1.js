@@ -328,6 +328,15 @@ var system,
                     return this.values.semiMajorAxis * (1 - Math.pow(this.values.e, 2)) / (1 + this.values.e * Math.cos(this.theta));
                 }
             },
+            r: {
+                get: function () {
+                    return this.object.rotation.y;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.object.rotation.y = value;
+                }
+            },
             R: {
                 get: function () {
                     return this.values.R;
@@ -432,6 +441,7 @@ var system,
         this.theta += radians * this.velocity;
         this.x = this.polar * Math.cos(this.theta) + this.R;
         this.z = this.polar * Math.sin(this.theta);
+        this.r = this.theta;
         return this;
     };
 
@@ -471,13 +481,11 @@ var system,
                 }
             });
             Object.defineProperty(this.store, label + 'Uuid', {
-                value: object.uuid
+                value: satellite.uuid
             });
         }
         return this;
     };
-    Planet.prototype = Object.create(Celestial.prototype);
-    Planet.prototype.constructor = Planet;
 
 
     function Star (seed) {
@@ -616,7 +624,7 @@ var system,
         planet = new Planet(new Seed4(SEED.getSet(12, 4)));
         system.addObject(planet.setOrbit(system.B ? system.B.values.semiMajorAxis * 3 : 300, (system.B ? system.B.values.semiMinorAxis * 3 : 300) * (round(0.0066 * SEED.parse(12)) + 0.9), radian(Math.random() * 360), 1), 'a');
         moon = new Satellite(new Seed4(SEED.getSet(20, 4)));
-        planet.addSatellite(moon.setOrbit(25, 25 * (round(0.00133 * SEED.parse(12)) + 0.98), radian(Math.random() * 360), 2), 'a1');
+        planet.addSatellite(moon.setOrbit(25, 25 * (round(0.00133 * SEED.parse(12)) + 0.98), radian(Math.random() * 360), 10), 'a1');
         // var planet, moon;
         // SEED = new Seed32(Seed32.create(32), 32);
         // system = new System();
