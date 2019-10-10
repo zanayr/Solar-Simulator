@@ -567,7 +567,7 @@ var system,
         if (!satellite.prime && satellite instanceof Satellite) {
             satellite.prime = this;
             this.satellites.add(satellite);
-            this.object.add(satellite.object);
+            this.object.add(satellite.orbit);
             Object.defineProperty(this, label, {
                 get: function () {
                     return OBJECTS.get(this[label + 'Uuid']);
@@ -612,7 +612,7 @@ var system,
             Math.round(190 - (100 * system.hydrogen))
         ], seed.parseSetRatio(0));
         this.radius = round(seed.parseSetRatio(1) * 20 + (this.class ? 140 + (this.class - 1) * 20 : 40));
-        this.mass = round((seed.parseSetRatio(2) * (system.hydrogen - 0.83) + 1.33) * volume(this.radius) / 10000);
+        this.mass = round(system.density * volume(this.radius) / 10000);
         this.seed = seed;
     }
     Alpha.prototype = Object.create(Star.prototype);
@@ -624,7 +624,7 @@ var system,
             Math.round(140 - (50 * system.hydrogen))
         ], seed.parseSetRatio(0));
         this.radius = round(seed.parseSetRatio(1) * 20 + (this.class ? 140 + (this.class - 1) * 20 : 40));
-        this.mass = round((seed.parseSetRatio(2) * (system.hydrogen - 0.83) + 1.33) * volume(this.radius) / 10000);
+        this.mass = round(system.density * volume(this.radius) / 10000);
         this.seed = seed;
     }
     Beta.prototype = Object.create(Star.prototype);
@@ -633,10 +633,11 @@ var system,
     
     function System () {
         this.age = round(SEED.parseSetRatio(0) * 12 + 1.8);
-        this.binary = SEED.parse(1) > 3;
-        // this.binary = false;
+        // this.binary = SEED.parse(1) > 3;
+        this.binary = true;
         this.hydrogen = round(SEED.parseSetRatio(1) * 0.2 + 0.9);
-        this.iron = round(SEED.parseSetRatio(2) * 0.1 + 0.1);
+        this.density = SEED.parseSetRatio(2) * (this.hydrogen - 0.83) + 1.33;
+        this.iron = round(SEED.parseSetRatio(3) * 0.1 + 0.1);
         this.name = SEED.getSet(0);
         // this.objects = new Collection();
         // Object.defineProperty(this, 'store', {
@@ -687,16 +688,9 @@ var system,
         system.addObject(alpha);
         alpha.planets.each(function (cthonian, i) {
             last = cthonian.radius / 2 + last + (10 * i);
-            cthonian.setOrbit(last + alpha.radius, round(SEED.parseRatio(10 + i) * 0.1), radian(Math.random() * 360), 3 - i, 1);
+            cthonian.setOrbit(last + alpha.radius, round(SEED.parseRatio(10 + i) * 0.1), radian(Math.random() * 360), 7 - i, 1);
             alpha.orbit.add(cthonian.orbit);
         });
-        // system.addObject(alpha.setOrbit(0, 0, 0, 0, 1), 'A');
-        //  Set cthonic planet orbits
-        // system.A.planets.each(function (cthonian, i) {
-        //     last = cthonian.radius / 2 + last + (10 * i);
-        //     cthonian.setOrbit(last + system.A.radius, round(SEED.parseRatio(10 + i) * 0.1), radian(Math.random() * 360), 3 - i, 1);
-        //     system.A.orbit.object.add(cthonian.orbit.object);
-        // });
     }
     function binary () {
         var s1, s2, a, b, last = 10;
@@ -716,13 +710,13 @@ var system,
         //  Set cthonic planet orbits
         s1.planets.each(function (cthonian, i) {
             last = cthonian.radius / 2 + last + (10 * i);
-            cthonian.setOrbit(last + s1.radius, round(SEED.parseRatio(10 + i) * 0.01), radian(Math.random() * 360), 3 - i, 1);
-            s1.orbit.add(cthonian.orbit);
+            cthonian.setOrbit(last + s1.radius, round(SEED.parseRatio(10 + i) * 0.01), radian(Math.random() * 360), 7 - i, 1);
+            s1.object.add(cthonian.orbit);
         });
         s2.planets.each(function (cthonian, i) {
             last = cthonian.radius / 2 + last + (10 * i);
-            cthonian.setOrbit(last + s2.radius, round(SEED.parseRatio(10 + i) * 0.01), radian(Math.random() * 360), 3 - i, 1);
-            s2.orbit.add(cthonian.orbit);
+            cthonian.setOrbit(last + s2.radius, round(SEED.parseRatio(10 + i) * 0.01), radian(Math.random() * 360), 7 - i, 1);
+            s2.object.add(cthonian.orbit);
         });
     }
     
@@ -738,10 +732,10 @@ var system,
         } else {
             uniary();
         }
-        // planet = new Planet(new Seed4(SEED.getSet(12, 4)));
-        // system.addObject(planet.setOrbit(300, 0.5/*round(SEED.parseRatio(12) * 0.1)*/, radian(Math.random() * 360), 1, 10), 'a');
-        // moon = new Satellite(new Seed4(SEED.getSet(20, 4)));
-        // planet.addSatellite(moon.setOrbit(25, round(SEED.parseRatio(13) * 0.01), radian(Math.random() * 360), 10, 1), 'a1');
+        planet = new Planet(new Seed4(SEED.getSet(12, 4)));
+        system.addObject(planet.setOrbit(300, round(SEED.parseRatio(12) * 0.1), radian(Math.random() * 360), 1, 30));
+        moon = new Satellite(new Seed4(SEED.getSet(20, 4)));
+        planet.addSatellite(moon.setOrbit(25, round(SEED.parseRatio(13) * 0.01), radian(Math.random() * 360), 10, 1));
     }
     function build () {
         OBJECTS.each(function (object) {
