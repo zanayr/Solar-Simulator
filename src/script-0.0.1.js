@@ -330,16 +330,21 @@ var system,
             },
             r: {
                 get: function () {
-                    return this.object.rotation.y;
-                },
-                set: function (value) {
-                    if (typeof value === 'number' && isFinite(value))
-                        this.object.rotation.y = value;
+                    return Math.acos(this.x / Math.sqrt(Math.pow(this.x, 2) + Math.pow(this.z, 2))) * Math.sign(this.z) * this.values.r;
                 }
             },
             R: {
                 get: function () {
                     return this.values.R;
+                }
+            },
+            rotation: {
+                get: function () {
+                    return this.mesh.rotation.y;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.mesh.rotation.y = value;
                 }
             },
             prime: {
@@ -370,6 +375,7 @@ var system,
             values: {
                 value: {
                     e: 0,
+                    r: 0,
                     R: 0,
                     semiMajorAxis: 0,
                     theta: 0,
@@ -416,32 +422,54 @@ var system,
         OBJECTS.add(this);
     };
     Celestial.prototype.setMesh = function (mesh) {
+        var g = new THREE.Geometry();
         if (mesh instanceof THREE.Mesh) {
             this.mesh = mesh;
             this.object.add(mesh);
+            g.vertices.push(new THREE.Vector3(0, 0, 0));
+            g.vertices.push(new THREE.Vector3(100, 0, 0));
+            this.mesh.add(new THREE.Line(g, new THREE.LineBasicMaterial({color: 0xffffff})));
         }
         return this;
     }
-    Celestial.prototype.setOrbit = function (a, b, theta, v) {
-        var e = a !== b ? Math.sqrt(1 - (Math.pow(b, 2) / Math.pow(a, 2))) : 0;
-        console.log(this);
+    // Celestial.prototype.setOrbit = function (a, b, theta, v, r) {
+    //     var e = a !== b ? Math.sqrt(1 - (Math.pow(b, 2) / Math.pow(a, 2))) : 0;
+    //     console.log(this);
+    //     Object.assign(this.values, {
+    //         d: Math.sqrt(Math.pow(a, 3)),
+    //         e: e,
+    //         F: e * a,
+    //         r: r ? r * -1 : -1,
+    //         R: 2 * e * a,
+    //         semiMajorAxis: a,
+    //         semiMinorAxis: b,
+    //         theta: theta,
+    //         velocity: v ? v : 1
+    //     });
+    //     loop.add(this.update.bind(this));
+    //     return this;
+    // };
+    Celestial.prototype.setOrbit = function (a, e, theta, v, r) {
+        var b = Math.sqrt((a * (1 - e)) * (a * (1 + e)));
         Object.assign(this.values, {
+            d: Math.sqrt(Math.pow(a, 3)),
             e: e,
             F: e * a,
+            r: r ? r * -1 : -1,
             R: 2 * e * a,
             semiMajorAxis: a,
             semiMinorAxis: b,
             theta: theta,
-            velocity: v || 1
+            velocity: v ? v : 1
         });
         loop.add(this.update.bind(this));
         return this;
-    };
+    }
     Celestial.prototype.update = function (radians) {
         this.theta += radians * this.velocity;
         this.x = this.polar * Math.cos(this.theta) + this.R;
         this.z = this.polar * Math.sin(this.theta);
-        this.r = this.theta;
+        this.rotation = this.r;
         return this;
     };
 
@@ -504,6 +532,13 @@ var system,
     }
     Star.prototype = Object.create(Celestial.prototype);
     Star.prototype.constructor = Star;
+    Star.prototype.update = function (radians) {
+        this.theta += radians * this.velocity;
+        this.x = this.polar * Math.cos(this.theta) + this.R;
+        this.z = this.polar * Math.sin(this.theta);
+        this.rotation = system.binary ? this.r : this.rotation + radians * this.values.r;
+        return this;
+    }
     function Alpha (seed) {
         Star.call(this, seed);
         this.class = parse([
@@ -581,9 +616,8 @@ var system,
         system.addObject(alpha.setOrbit(0, 0, 0, 0), 'A');
         //  Set cthonic planet orbits
         system.A.planets.each(function (cthonian, i) {
-            var e = round(0.00133 * SEED.parse(10 + i)) + 0.98;
             last = cthonian.radius / 2 + last + (10 * i);
-            cthonian.setOrbit(last + system.A.radius, (last + system.A.radius) * e, radian(Math.random() * 360), 3 - i);
+            cthonian.setOrbit(last + system.A.radius, round(SEED.parseRatio(10 + i) * 0.01), radian(Math.random() * 360), 3 - i, 1);
         });
     }
     function binary () {
@@ -595,18 +629,16 @@ var system,
         //  Set binary orbit
         a = round(s1.radius + s2.radius + SEED.parseSetRatio(0) * 150 + 50);
         b = round(a * (s2.mass / (s1.mass + s2.mass)), 2) * -1; // Barrycenter
-        system.A.setOrbit(b, b * (round(0.00133 * SEED.parse(1)) + 0.98), 0, 0.5);
-        system.B.setOrbit(a + b, (a + b) * (round(0.00133 * SEED.parse(1)) + 0.98), 0, 0.5);
+        system.A.setOrbit(b, round(SEED.parseRatio(9) * 0.01), 0, 0.5, 1);
+        system.B.setOrbit(a + b, round(SEED.parseRatio(4) * 0.01), 0, 0.5, 1);
         //  Set cthonic planet orbits
         system.A.planets.each(function (cthonian, i) {
-            var e = round(0.00133 * SEED.parse(10 + i)) + 0.98;
             last = cthonian.radius / 2 + last + (10 * i);
-            cthonian.setOrbit(last + system.A.radius, (last + system.A.radius) * e, radian(Math.random() * 360), 3 - i);
+            cthonian.setOrbit(last + system.A.radius, round(SEED.parseRatio(10 + i) * 0.01), radian(Math.random() * 360), 3 - i, 1);
         });
         system.B.planets.each(function (cthonian, i) {
-            var e = round(0.00133 * SEED.parse(10 + i)) + 0.98;
             last = cthonian.radius / 2 + last + (10 * i);
-            cthonian.setOrbit(last + system.B.radius, (last + system.B.radius) * e, radian(Math.random() * 360), 3 - i);
+            cthonian.setOrbit(last + system.B.radius, round(SEED.parseRatio(10 + i) * 0.01), radian(Math.random() * 360), 3 - i, 1);
         });
     }
 
@@ -622,18 +654,9 @@ var system,
             uniary();
         }
         planet = new Planet(new Seed4(SEED.getSet(12, 4)));
-        system.addObject(planet.setOrbit(system.B ? system.B.values.semiMajorAxis * 3 : 300, (system.B ? system.B.values.semiMinorAxis * 3 : 300) * (round(0.0066 * SEED.parse(12)) + 0.9), radian(Math.random() * 360), 1), 'a');
+        system.addObject(planet.setOrbit(300, round(SEED.parseRatio(12) * 0.1), radian(Math.random() * 360), 1, 10), 'a');
         moon = new Satellite(new Seed4(SEED.getSet(20, 4)));
-        planet.addSatellite(moon.setOrbit(25, 25 * (round(0.00133 * SEED.parse(12)) + 0.98), radian(Math.random() * 360), 10), 'a1');
-        // var planet, moon;
-        // SEED = new Seed32(Seed32.create(32), 32);
-        // system = new System();
-        // // uniary();
-        // system.binary ? binary() : uniary();
-        // system.add(new Planet('a', SEED.getSet(12, 4)), 'a');
-        // system.a.setOrbit(300, 300, Math.random() * 360);
-        // system.a.add(new Satellite(parse([20, 40, 60, 80], SEED.parseSetRatio(20)), SEED.getSet(21), SEED.getSet(22)), 'a1');
-        // system.a.a1.setOrbit(50, 50, Math.random() * 360);
+        planet.addSatellite(moon.setOrbit(25, round(SEED.parseRatio(13) * 0.01), radian(Math.random() * 360), 10, 1), 'a1');
     }
     function build () {
         OBJECTS.each(function (object) {
@@ -656,6 +679,7 @@ var system,
                 scene.add(object.focus[1]);
             }
         });
+        scene.add(ellipse(0, 300, 300));
     }
     function init () {
         var canvas = $('#canvas');
