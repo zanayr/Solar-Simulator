@@ -1,7 +1,6 @@
 var system,
     LOOP,
     scene,
-    db,
     OBJECTS;
 (function () {
     var _values = {au: 300, seed: null, speed: 0.01},
@@ -52,6 +51,7 @@ var system,
         var i, l;
         for (i = 0, l = LOOP.updates.length; i < l; i++)
             LOOP.updates[i](toRadian(step));
+            // LOOP.updates[i](toRadian(step));
     }
     /*
     camera.position.applyQuaternion( new THREE.Quaternion().setFromAxisAngle
@@ -61,8 +61,8 @@ var system,
     camera.lookAt( scene.position );
     */
     function render (step) {
-        camera.position.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), toRadian(step)));
-        camera.lookAt(scene.position);
+        // camera.position.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), toRadian(step)));
+        // camera.lookAt(scene.position);
         renderer.render(scene, camera);
     }
     function main (timestamp) {
@@ -287,50 +287,59 @@ var system,
 
 
     //  Orbit Ellipse  //
-    function OrbitEllipse (x, major, minor) {
+    function OrbitEllipse (x, major, minor, theta) {
+        this.bifercator = new Line(new THREE.Vector3(major * -1, 0, 0), new THREE.Vector3(major, 0, 0)).line;
         this.curve = new Ellipse(x, major, minor).curve;
         this.focus = [[
             new Line(new THREE.Vector3(-5, 0, 0), new THREE.Vector3(5, 0, 0)).line,
             new Line(new THREE.Vector3(0, 0, -5), new THREE.Vector3(0, 0, 5)).line
         ], [
-            new Line(new THREE.Vector3(2 * x - 5, 0, 0), new THREE.Vector3(2 * x + 5, 0, 0)).line,
-            new Line(new THREE.Vector3(2 * x, 0, -5), new THREE.Vector3(2 * x, 0, 5)).line,
+            new Line(new THREE.Vector3((2 * x - 5) * Math.cos(theta), 0, (2 * x - 5) * Math.sin(theta)), new THREE.Vector3((2 * x + 5) * Math.cos(theta), 0, (2 * x + 5) * Math.sin(theta))).line,
+            new Line(new THREE.Vector3(2 * x * Math.cos(theta), 0, 2 * x * Math.sin(theta) - 5), new THREE.Vector3(2 * x * Math.cos(theta), 0, 2 * x * Math.sin(theta) - 5)).line,,
         ]];
     }
 
 
     //  Orbit  //
-    function OrbitII (object, r, ecc, theta) {
+    function Orbit (r, ecc, iota) {
         var a = r && isFinite(r) ? r : 0,
             e = ecc && isFinite(ecc) ? ecc : 0,
-            b = Math.sqrt((a *(1 - e)) * (a * (1 - e)));
+            b = Math.sqrt((a * (1 - e)) * (a * (1 + e))),
+            ellipse = new OrbitEllipse(a * e, a, b, iota);
         Object.defineProperties(this, {
+            bifercator: {
+                value: ellipse.bifercator
+            },
             ellipse: {
-                value: new OrbitEllipse(a * e, a, b).curve
+                value: ellipse.curve
             },
             focus: {
-                value: [
-                    new Line(new THREE.Vector3(-5, 0, 0), new THREE.Vector(5, 0, 0)).line,
-                    new Line(new THREE.Vector3(a * e - 5, 0, 0), new THREE.Vector3(a * e + 5, 0, 0)).line
-                ]
+                value: ellipse.focus
             },
             objects: {
                 value: new Collection()
+            },
+            uuid: {
+                value: uuid()
             },
             values: {
                 value: {
                     d: 2 * e * a,
                     e: e,
+                    l: a * (1 - Math.pow(e, 2)),
                     origin: {x: e * a, z: 0},
                     period: Math.sqrt(Math.pow(a / _values.au, 3)),
-                    rotation: toRadian(theta),
+                    iota: toRadian(iota % 360),
                     semiMajorAxis: a,
                     semiMinorAxis: b
                 }
             }
         });
+        this.ellipse.rotation.y = this.values.iota;
+        this.bifercator.rotation.y = this.values.iota;
+        ORBITS.add(this);
     }
-    OrbitII.prototype.addObject = function (object) {
+    Orbit.prototype.addObject = function (object) {
         if (object instanceof Celestial) {
             this.objects.add(object);
             object.setOrbit(this);
@@ -340,109 +349,108 @@ var system,
 
 
 
-    function Orbit (r, ecc, theta, iota) {
-        var a = r && isFinite(r) ? r : 0,
-            e = ecc && isFinite(ecc) ? ecc : 0,
-            b = Math.sqrt((a * (1 - e)) * (a * (1 + e)));
-        Object.defineProperties(this, {
-            ellipse: {
-                value: []
-            },
-            focus: {
-                value: []
-            },
-            object3d: {
-                value: new THREE.Object3D()
-            },
-            objects: {
-                value: new Collection()
-            },
-            polar: {
-                get: function () {
-                    return this.values.semiMajorAxis * (1 - Math.pow(this.values.e, 2)) / (1 - this.values.e * Math.cos(this.values.current));
-                }
-            },
-            values: {
-                value: {
-                    current: iota && isFinite(iota) ? toRadian(iota % 360) : 0,
-                    d: 2 * e * a,
-                    e: e,
-                    origin: {x: e * a, z: 0},
-                    period: Math.sqrt(Math.pow(a / _values.au, 3)),
-                    semiMajorAxis: a,
-                    semiMinorAxis: b,
-                    velocity: 1
-                }
-            },
-            uuid: {
-                value: uuid()
-            },
-            x: {
-                get: function () {
-                    return this.object3d.position.x;
-                },
-                set: function (value) {
-                    if (value && isFinite(value))
-                        this.object3d.position.x = value;
-                }
-            },
-            y: {
-                get: function () {
-                    return this.object3d.position.y;
-                },
-                set: function (value) {
-                    if (value && isFinite(value))
-                        this.object3d.position.y = value;
-                }
-            },
-            z: {
-                get: function () {
-                    return this.object3d.position.z;
-                },
-                set: function (value) {
-                    if (value && isFinite(value))
-                        this.object3d.position.z = value;
-                }
-            }
-        });
-        this.object3d.rotation.y = theta && isFinite(theta) ? toRadian(theta % 360) : 0;
-        ORBITS.add(this);
-    }
-    Orbit.prototype.addObject = function (object) {
-        this.objects.add(object);
-        this.object3d.add(object.object3d);
-        object.orbit = this;
-        return this;
-    };
-    Orbit.prototype.addEllipse = function (values) {
-        console.log(values);
-        var e = new OrbitEllipse(values.origin.x, values.semiMajorAxis, values.semiMinorAxis);
-        this.ellipse.push(e.curve);
-        this.focus.push(e.focus);
-        this.object3d.add(e.curve);
-        this.object3d.add(e.focus[0][0]);
-        this.object3d.add(e.focus[0][1]);
-        this.object3d.add(e.focus[1][0]);
-        this.object3d.add(e.focus[1][1]);
-        return this;
-    };
-    Orbit.prototype.setDynamics = function (v) {
-        Object.assign(this.values, {velocity: v && isFinite(v) ? v : 1});
-        return this;
-    };
-    Orbit.prototype.update = function (radian) {
-        this.values.current += radian * this.values.velocity;
-        this.x = this.polar * Math.cos(this.values.current);
-        this.z = this.polar * Math.sin(this.values.current);
-        return this;
-    };
+    // function Orbit (r, ecc, theta, iota) {
+    //     var a = r && isFinite(r) ? r : 0,
+    //         e = ecc && isFinite(ecc) ? ecc : 0,
+    //         b = Math.sqrt((a * (1 - e)) * (a * (1 + e)));
+    //     Object.defineProperties(this, {
+    //         ellipse: {
+    //             value: []
+    //         },
+    //         focus: {
+    //             value: []
+    //         },
+    //         object3d: {
+    //             value: new THREE.Object3D()
+    //         },
+    //         objects: {
+    //             value: new Collection()
+    //         },
+    //         polar: {
+    //             get: function () {
+    //                 return this.values.semiMajorAxis * (1 - Math.pow(this.values.e, 2)) / (1 - this.values.e * Math.cos(this.values.current));
+    //             }
+    //         },
+    //         values: {
+    //             value: {
+    //                 current: iota && isFinite(iota) ? toRadian(iota % 360) : 0,
+    //                 d: 2 * e * a,
+    //                 e: e,
+    //                 origin: {x: e * a, z: 0},
+    //                 period: Math.sqrt(Math.pow(a / _values.au, 3)),
+    //                 semiMajorAxis: a,
+    //                 semiMinorAxis: b,
+    //                 velocity: 1
+    //             }
+    //         },
+    //         uuid: {
+    //             value: uuid()
+    //         },
+    //         x: {
+    //             get: function () {
+    //                 return this.object3d.position.x;
+    //             },
+    //             set: function (value) {
+    //                 if (value && isFinite(value))
+    //                     this.object3d.position.x = value;
+    //             }
+    //         },
+    //         y: {
+    //             get: function () {
+    //                 return this.object3d.position.y;
+    //             },
+    //             set: function (value) {
+    //                 if (value && isFinite(value))
+    //                     this.object3d.position.y = value;
+    //             }
+    //         },
+    //         z: {
+    //             get: function () {
+    //                 return this.object3d.position.z;
+    //             },
+    //             set: function (value) {
+    //                 if (value && isFinite(value))
+    //                     this.object3d.position.z = value;
+    //             }
+    //         }
+    //     });
+    //     this.object3d.rotation.y = theta && isFinite(theta) ? toRadian(theta % 360) : 0;
+    //     ORBITS.add(this);
+    // }
+    // Orbit.prototype.addObject = function (object) {
+    //     this.objects.add(object);
+    //     this.object3d.add(object.object3d);
+    //     object.orbit = this;
+    //     return this;
+    // };
+    // Orbit.prototype.addEllipse = function (values) {
+    //     console.log(values);
+    //     var e = new OrbitEllipse(values.origin.x, values.semiMajorAxis, values.semiMinorAxis);
+    //     this.ellipse.push(e.curve);
+    //     this.focus.push(e.focus);
+    //     this.object3d.add(e.curve);
+    //     this.object3d.add(e.focus[0][0]);
+    //     this.object3d.add(e.focus[0][1]);
+    //     this.object3d.add(e.focus[1][0]);
+    //     this.object3d.add(e.focus[1][1]);
+    //     return this;
+    // };
+    // Orbit.prototype.setDynamics = function (v) {
+    //     Object.assign(this.values, {velocity: v && isFinite(v) ? v : 1});
+    //     return this;
+    // };
+    // Orbit.prototype.update = function (radian) {
+    //     this.values.current += radian * this.values.velocity;
+    //     this.x = this.polar * Math.cos(this.values.current);
+    //     this.z = this.polar * Math.sin(this.values.current);
+    //     return this;
+    // };
 
 
     //  System  //
     function System () {
         this.age = round2(_values.seed.ratio(0) * 12 + 1.8);
         this.hydrogen = round2(_values.seed.ratio(1) * 0.2 + 0.9);
-        this.center = new Orbit(0, 0, 0, 0);
         this.iron = round2(_values.seed.ratio(2) * 0.1 + 0.1);
         this.density = round2(_values.seed.ratio(3) * (this.hydrogen - 0.83) + 1.33);
         this.name = _values.seed.getSet(0, 4);
@@ -451,16 +459,15 @@ var system,
                 value: {}
             }
         });
-        scene.add(this.center.object3d);
     }
-    System.prototype.addEllipse = function (values) {
-        this.center.addEllipse(values);
-        return this;
-    };
-    System.prototype.addObject = function (object) {
-        this.center.addObject(object);
-        return this;
-    };
+    // System.prototype.addEllipse = function (values) {
+    //     this.center.addEllipse(values);
+    //     return this;
+    // };
+    // System.prototype.addObject = function (object) {
+    //     this.center.addObject(object);
+    //     return this;
+    // };
     System.prototype.pause = function () {
         stop();
         return this;
@@ -499,17 +506,22 @@ var system,
     //  Celestial  //
     function Celestial () {
         Object.defineProperties(this, {
+            iota: {
+                get: function () {
+                    return (this.values.iota - this.values.theta) * -1;
+                }
+            },
             object3d: {
                 value: new THREE.Object3D()
             },
             polar: {
                 get: function () {
-                    return this.values.semiMajorAxis * (1 - Math.pow(this.values.e, 2)) / (1 - this.values.e * Math.cos(this.values.current));
+                    return this.values.l / (1 - this.values.e * Math.cos(this.values.theta));
                 }
             },
             r: {
                 get: function () {
-                    return this.values.current * this.values.r;
+                    return this.values.theta * this.values.r;
                 }
             },
             rotation: {
@@ -527,16 +539,12 @@ var system,
             },
             values: {
                 value: {
-                    current: 0,
-                    d: 0,
                     e: 0,
-                    origin: {x: 0, z: 0},
-                    period: 0,
-                    r: 0,
+                    iota: 0,
+                    r: 1,
                     semiMajorAxis: 0,
-                    semiMinorAxis: 0,
-                    velocity: 1,
-                    iota: 45 * (Math.PI / 180)
+                    theta: 0,
+                    velocity: 1
                 }
             },
             x: {
@@ -572,41 +580,145 @@ var system,
         });
         OBJECTS.add(this);
     }
-    Celestial.prototype.setDynamics = function (r, v, iota) {
+    Celestial.prototype.setDynamics = function (r, v, theta) {
         Object.assign(this.values, {
-            current: iota && isFinite(iota) ? toRadian(iota % 360) : 0,
+            theta: theta && isFinite(theta) ? toRadian(theta % 360) : 0,
             velocity: v && isFinite(v) ? v : 1,
-            r: r && isFinite(r) ? r * -1 : -1
+            r: r && isFinite(r) ? r : 1
         });
         return this;
     };
-    Celestial.prototype.setOrbit = function (r, ecc) {
-        var a = r && isFinite(r) ? r : 0,
-            e = ecc && isFinite(ecc) ? ecc : 0,
-            b = Math.sqrt((a * (1 - e)) * (a * (1 + e)));
-        Object.assign(this.values, {
-            current: 0,
-            d: 2 * e * a,
-            e: e,
-            origin: {x: e * a, z: 0},
-            period: Math.sqrt(Math.pow(a / _values.au, 3)),
-            semiMajorAxis: a,
-            semiMinorAxis: b,
-            velocity: 1,
-            r: -1
-        });
+    Celestial.prototype.setOrbit = function (orbit) {
+        Object.assign(this.values, orbit.values);
+        scene.add(orbit.ellipse);
+        scene.add(orbit.bifercator);
+        scene.add(orbit.focus[0][0]);
+        scene.add(orbit.focus[0][1]);
+        scene.add(orbit.focus[1][0]);
+        scene.add(orbit.focus[1][1]);
         return this;
     };
     Celestial.prototype.update = function (radian) {
-        var x, y;
-        this.values.current += radian * this.values.velocity;
-        x = this.polar * Math.cos(this.values.current);
-        y = this.polar * Math.sin(this.values.current);
-        this.x = x * Math.cos(this.values.iota) + y * Math.sin(this.values.iota);
-        this.z = (x * -1) * Math.sin(this.values.iota) + y * Math.cos(this.values.iota);
-        this.rotation = this.r;
+        var x, z;
+        this.values.theta += radian * this.values.velocity;
+        this.x = this.polar * Math.cos(this.iota);
+        this.z = this.polar * Math.sin(this.iota);
+        // z = this.polar * Math.sin(this.values.theta);
+        // this.x = x * Math.cos(this.iota);// + z * Math.sin(this.iota);
+        // this.z = (x * -1) * Math.sin(this.iota) + z * Math.cos(this.iota);
+        // this.rotation = this.r;
         return this;
     };
+    // function Celestial () {
+    //     Object.defineProperties(this, {
+    //         object3d: {
+    //             value: new THREE.Object3D()
+    //         },
+    //         polar: {
+    //             get: function () {
+    //                 return this.values.semiMajorAxis * (1 - Math.pow(this.values.e, 2)) / (1 - this.values.e * Math.cos(this.values.current));
+    //             }
+    //         },
+    //         r: {
+    //             get: function () {
+    //                 return this.values.current * this.values.r;
+    //             }
+    //         },
+    //         rotation: {
+    //             get: function () {
+    //                 return this.mesh.rotation.y;
+    //             },
+    //             set: function (value) {
+    //                 if (value && isFinite(value))
+    //                     this.mesh.rotation.y = value;
+    //                 return value;
+    //             }
+    //         },
+    //         uuid: {
+    //             value: uuid()
+    //         },
+    //         values: {
+    //             value: {
+    //                 current: 0,
+    //                 d: 0,
+    //                 e: 0,
+    //                 origin: {x: 0, z: 0},
+    //                 period: 0,
+    //                 r: 0,
+    //                 semiMajorAxis: 0,
+    //                 semiMinorAxis: 0,
+    //                 velocity: 1,
+    //                 iota: 45 * (Math.PI / 180)
+    //             }
+    //         },
+    //         x: {
+    //             get: function () {
+    //                 return this.object3d.position.x;
+    //             },
+    //             set: function (value) {
+    //                 if (value && isFinite(value))
+    //                     this.object3d.position.x = value;
+    //                 return value;
+    //             }
+    //         },
+    //         y: {
+    //             get: function () {
+    //                 return this.object3d.position.y;
+    //             },
+    //             set: function (value) {
+    //                 if (value && isFinite(value))
+    //                     this.object3d.position.y = value;
+    //                 return value;
+    //             }
+    //         },
+    //         z: {
+    //             get: function () {
+    //                 return this.object3d.position.z;
+    //             },
+    //             set: function (value) {
+    //                 if (value && isFinite(value))
+    //                     this.object3d.position.z = value;
+    //                 return value;
+    //             }
+    //         }
+    //     });
+    //     OBJECTS.add(this);
+    // }
+    // Celestial.prototype.setDynamics = function (r, v, iota) {
+    //     Object.assign(this.values, {
+    //         current: iota && isFinite(iota) ? toRadian(iota % 360) : 0,
+    //         velocity: v && isFinite(v) ? v : 1,
+    //         r: r && isFinite(r) ? r * -1 : -1
+    //     });
+    //     return this;
+    // };
+    // Celestial.prototype.setOrbit = function (r, ecc) {
+    //     var a = r && isFinite(r) ? r : 0,
+    //         e = ecc && isFinite(ecc) ? ecc : 0,
+    //         b = Math.sqrt((a * (1 - e)) * (a * (1 + e)));
+    //     Object.assign(this.values, {
+    //         current: 0,
+    //         d: 2 * e * a,
+    //         e: e,
+    //         origin: {x: e * a, z: 0},
+    //         period: Math.sqrt(Math.pow(a / _values.au, 3)),
+    //         semiMajorAxis: a,
+    //         semiMinorAxis: b,
+    //         velocity: 1,
+    //         r: -1
+    //     });
+    //     return this;
+    // };
+    // Celestial.prototype.update = function (radian) {
+    //     var x, y;
+    //     this.values.current += radian * this.values.velocity;
+    //     x = this.polar * Math.cos(this.values.current);
+    //     y = this.polar * Math.sin(this.values.current);
+    //     this.x = x * Math.cos(this.values.iota) + y * Math.sin(this.values.iota);
+    //     this.z = (x * -1) * Math.sin(this.values.iota) + y * Math.cos(this.values.iota);
+    //     this.rotation = this.r;
+    //     return this;
+    // };
 
     
     //  Star  //
@@ -620,6 +732,7 @@ var system,
         this.radius = round2(seed.ratio(1) * 20 + (this.class ? 140 + (this.class - 1) * 20 : 40));
         this.mass = round2(system.density * volume(this.radius) / 10000);
         this.seed = seed;
+        scene.add(this.object3d);
     }
     Star.prototype = Object.create(Celestial.prototype);
     Star.prototype.constructor = Star;
@@ -647,55 +760,270 @@ var system,
     Planet.prototype = Object.create(Celestial.prototype);
     Planet.prototype.constructor = Planet;
 
+    function OrbitII (r, ecc, theta, phi) {
+        var a = typeof r === 'number' && isFinite(r) ? r : 0,
+            e = typeof ecc === 'number' && isFinite(ecc) && (ecc >= 0 && ecc <= 1) ? ecc : 0,
+            b = Math.sqrt((a * (1 - e)) * (a * (1 + e)));
+        Object.defineProperties(this, {
+            r: {
+                get: function () {
+                    return this.values.semiLatusRectum / (1 - this.values.e * Math.cos(this.values.theta));
+                }
+            },
+            ellipses: {
+                value: []
+            },
+            uuid: {
+                value: uuid()
+            },
+            values: {
+                value: {
+                    e: e,
+                    phi: toRadian(phi % 360),
+                    semiLatusRectum: a * (1 - Math.pow(e, 2)),
+                    semiMajorAxis: a,
+                    semiMinorAxis: b,
+                    theta: toRadian(theta % 360)
+                }
+            },
+            x: {
+                get: function () {
+                    return this.r * Math.cos(this.values.theta - this.values.phi); //+ this.values.e * this.values.semiMajorAxis;
+                }
+            },
+            z: {
+                get: function () {
+                    return this.r * Math.sin(this.values.theta - this.values.phi);
+                }
+            }
+        });
+        (function () {
+            var el = new OrbitEllipse(e * a, a, b);
+            scene.add(el.curve);
+            // el.focus.forEach(function (f) {
+            //     scene.add(f[0]);
+            //     scene.add(f[1]);
+            // });
+            el.curve.rotation.y = toRadian(phi % 360);
+        }());
+        ORBITS.add(this);
+    }
+    OrbitII.prototype.addObject = function (object) {
+        var u = this.uuid;
+        if (object instanceof CelestialII) {
+            Object.defineProperty(object.store, 'orbitUuid', {
+                value: u
+            });
+            Object.defineProperty(object, 'orbit', {
+                get: function () {
+                    return ORBITS.get(object.store.orbitUuid);
+                }
+            });
+        }
+    };
+    OrbitII.prototype.update = function (radian) {
+        var i, l;
+        this.values.theta += radian;
+        for (i = 0, l = this.ellipses.length; i < l; i++)
+            this.ellipses[i].curve.position.set(this.x, 0, this.z);
+        return this;
+    };
+    function CelestialII () {
+        Object.defineProperties(this, {
+            object3d: {
+                value: new THREE.Object3D()
+            },
+            r: {
+                get: function () {
+                    return this.values.semiLatusRectum / (1 - this.values.e * Math.cos(this.values.theta));
+                }
+            },
+            store: {
+                value: {}
+            },
+            uuid: {
+                value: uuid()
+            },
+            values: {
+                value: {
+                    semiLatusRectum: 0,
+                    semiMajorAxis: 0,
+                    e: 0,
+                    theta: 0,
+                    phi: 0,
+                    rotation: 1,
+                    velocity: 1
+                }
+            },
+            x: {
+                get: function () {
+                    return this.object3d.position.x;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.object3d.position.x = value;
+                    return value;
+                }
+            },
+            y: {
+                get: function () {
+                    return this.object3d.position.y;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.object3d.position.y = value;
+                    return value;
+                }
+            },
+            z: {
+                get: function () {
+                    return this.object3d.position.z;
+                },
+                set: function (value) {
+                    if (typeof value === 'number' && isFinite(value))
+                        this.object3d.position.z = value;
+                    return value;
+                }
+            }
+        });
+        this.object3d.add(new Line(new THREE.Vector3(0, -10, 0), new THREE.Vector3(0, 10, 0)).line);
+        OBJECTS.add(this);
+    }
+    CelestialII.prototype.setOrbit = function (a, ecc, theta, phi) {
+        var e, p;
+        if (this.orbit instanceof OrbitII) {
+            p = this.orbit.values.phi;
+            Object.assign(this.values, {
+                e: ecc && isFinite(ecc) ? ecc : 0,
+                phi: phi && isFinite(phi) ? toRadian(phi % 360) + p : p,
+                semiLatusRectum: a * (1 - Math.pow(ecc, 2)),
+                semiMajorAxis: a && isFinite(a) ? a : 0,
+                theta: theta && isFinite(theta) ? toRadian(theta % 360) : 0,
+            });
+            e = new OrbitEllipse(ecc * a, a, Math.sqrt((a * (1 - ecc)) * (a * (1 + ecc))));
+            this.orbit.ellipses.push(e);
+            scene.add(e.curve);
+            // el.focus.forEach(function (f) {
+            //     scene.add(f[0]);
+            //     scene.add(f[1]);
+            // });
+            e.curve.rotation.y = this.values.phi;
+        }
+        return this;
+    }
+    CelestialII.prototype.setDynamics = function (rotation, velocity) {
+        if (this.orbit instanceof OrbitII) {
+            Object.assign(this.values, {
+                rotation: rotation && isFinite(rotation) ? rotation : 1,
+                velocity: velocity && isFinite(velocity) ? velocity : 1
+            });
+        }
+        return this;
+    }
+    // CelestialII.prototype.setOrbit2 = function (a, ecc, theta, phi) {
+    //     // var el;
+    //     if (this.orbit instanceof OrbitII) {
+    //         // el = new OrbitEllipse(e * a, a, Math.sqrt((a * (1 - e)) * (a * (1 + e))));
+    //         Object.assign(this.values, {
+    //             e: ecc,
+    //             phi: toRadian((phi + toDegree(this.orbit.values.phi)) % 360),
+    //             semiLatusRectum: a * (1 - Math.pow(ecc, 2)),
+    //             theta: toRadian(theta % 360)
+    //         });
+    //         // this.orbit.ellipses.push(el);
+    //         // scene.add(el.curve);
+    //         // el.focus.forEach(function (f) {
+    //         //     scene.add(f[0]);
+    //         //     scene.add(f[1]);
+    //         // });
+    //         // el.curve.rotation.y = this.values.phi;
+    //     }
+    // }
+    CelestialII.prototype.update = function (radian) {
+        this.values.theta += radian * this.values.velocity;
+        this.x = this.r * Math.cos(this.values.theta - this.values.phi) + this.orbit.x;
+        this.z = this.r * Math.sin(this.values.theta - this.values.phi) + this.orbit.z;
+        return this;
+    }
+
 
     
 
 
     //  Creation Functions  //
+    // function stars () {
+    //     var s1, s2, bc, orbit;
+    //     s1 = new Star(_values.seed.createFrom(4, 4));
+    //     // orbit = new Orbit(0, 0, 0, 0);
+    //     if (_values.seed.ratio(0) >= 0.4) {
+    //         s2 = new Star(_values.seed.createFrom(8, 4));
+    //         system.setLabel(s1.mass >= s2.mass ? s1 : s2, 'A');
+    //         system.setLabel(system.A.uuid === s1.uuid ? s2 : s1, 'B');
+    //         system.A.age();
+    //         system.B.age();
+    //         bc = barycenter(system.A, system.B, _values.seed.ratio(1) * 150 + 50);
+    //         system.A.setOrbit(bc.b, _values.seed.ratio(6) * 0.1)
+    //             .setDynamics(1, 1, 0);
+    //         system.B.setOrbit(bc.a + bc.b, _values.seed.ratio(10) * 0.1)
+    //             .setDynamics(1, 1, 0);
+    //         system.addObject(system.A)
+    //             .addEllipse(system.A.values);
+    //         system.addObject(system.B)
+    //             .addEllipse(system.B.values);
+    //     } else {
+    //         system.setLabel(s1, 'A');
+    //         system.A.age()
+    //             .setOrbit(0, _values.seed.ratio(6) * 0.1)
+    //             .setDynamics(1, 1, 0);
+    //         system.addObject(system.A);
+    //     }
+    // }
+    // function planets () {
+    //     var planet;
+    //     planet = new Planet(_values.seed.createFrom(12, 4));
+    //     orbit = new Orbit(300, 0.25, 0, 0, true);
+    //     system.setLabel(planet, 'a');
+    //     system.a.setOrbit(0, 0)
+    //         .setDynamics(1, 1, 0);
+    //     orbit.addObject(system.a)
+    //         .setDynamics(3);
+    //     system.addObject(orbit)
+    //         .addEllipse(orbit.values, scene);
+    // }
+    /*
+    planet = new Planet(new Celestial(class, seed), new Orbit(r, ecc, theta))
+    */
     function stars () {
-        var s1, s2, bc, orbit;
+        var s1, s2, bc, o1, o2;
         s1 = new Star(_values.seed.createFrom(4, 4));
-        // orbit = new Orbit(0, 0, 0, 0);
-        if (_values.seed.ratio(0) >= 0.4) {
+        // if (_values.seed.ratio(0) >= 0.4) {
+        if (false) {
             s2 = new Star(_values.seed.createFrom(8, 4));
             system.setLabel(s1.mass >= s2.mass ? s1 : s2, 'A');
             system.setLabel(system.A.uuid === s1.uuid ? s2 : s1, 'B');
             system.A.age();
             system.B.age();
             bc = barycenter(system.A, system.B, _values.seed.ratio(1) * 150 + 50);
-            system.A.setOrbit(bc.b, _values.seed.ratio(6) * 0.1)
-                .setDynamics(1, 1, 0);
-            system.B.setOrbit(bc.a + bc.b, _values.seed.ratio(10) * 0.1)
-                .setDynamics(1, 1, 0);
-            system.addObject(system.A)
-                .addEllipse(system.A.values);
-            system.addObject(system.B)
-                .addEllipse(system.B.values);
+            o1 = new Orbit(bc.b, _values.seed.ratio(6) * 0.5, 45);
+            o2 = new Orbit(bc.a + bc.b, _values.seed.ratio(6) * 0.5, 45);
+            o1.addObject(system.A);
+            o2.addObject(system.B);
+            system.A.setDynamics(1, 1, 0);
+            system.B.setDynamics(1, 1, 0);
+            // system.addObject(system.A)
+            //     .addEllipse(system.A.values);
+            // system.addObject(system.B)
+            //     .addEllipse(system.B.values);
         } else {
+            
             system.setLabel(s1, 'A');
-            system.A.age()
-                .setOrbit(0, _values.seed.ratio(6) * 0.1)
-                .setDynamics(1, 1, 0);
-            system.addObject(system.A);
+            system.A.age();
+            new Orbit(200, 0.5, 45).addObject(system.A);
+            system.A.setDynamics(1, 1, 0);
         }
     }
     function planets () {
-        var planet;
-        planet = new Planet(_values.seed.createFrom(12, 4));
-        orbit = new Orbit(300, 0.25, 0, 0, true);
-        system.setLabel(planet, 'a');
-        system.a.setOrbit(0, 0)
-            .setDynamics(1, 1, 0);
-        orbit.addObject(system.a)
-            .setDynamics(3);
-        system.addObject(orbit)
-            .addEllipse(orbit.values, scene);
-    }
-    function OrbitII (object, r, ecc, theta, iota) {
-        
-    }
-    function planetsII () {
-        var orbit = new OrbitII(null, 300, 0.25, 0, 0),
+        var orbit = new Orbit(null, 300, 0.25, 0, 0),
             planet = new Planet(_values.seed.createFrom(12, 4));
         orbit.addObject(planet); // Should automatically create an ellipse, and the object's values are pared to that orbit
         planet.setDynamics(1, 1);
@@ -705,10 +1033,21 @@ var system,
 
     //  App Functions  //
     function create () {
-        _values.seed = new Seed(Seed.create('', 32));
-        system = new System();
+        var o = new OrbitII(100, 0.5, 0, 45),
+            c0 = new CelestialII(),
+            c1 = new CelestialII(),
+            c2 = new CelestialII();
+        o.addObject(c0);
+        o.addObject(c1);
+        o.addObject(c2);
+        c1.setOrbit(25, 0.5, 0, 45)
+            .setDynamics(1, 5);
+        c2.setOrbit(-25, 0.5, 0, 45)
+            .setDynamics(1, 5);
+        // _values.seed = new Seed(Seed.create('', 32));
+        // system = new System();
         //  Create Stars
-        stars();
+        // stars(); 
         // planets();
     }
     function build () {
@@ -716,29 +1055,9 @@ var system,
             LOOP.add(orbit.update.bind(orbit));
         });
         OBJECTS.each(function (object) {
-            var u, v, geometry;
-            u = v = Math.floor(object.radius / 20 + 6);
-            geometry = new THREE.SphereGeometry(object.radius, u, v);
-            object.mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({color: 0xffffff, wireframe: true}));
-            object.mesh.add(new Line(new THREE.Vector3(0, 0, 0), new THREE.Vector3(-100 * Math.sign(object.values.semiMajorAxis), 0, 0)).line);
-            object.object3d.add(object.mesh);
+            scene.add(object.object3d);
             LOOP.add(object.update.bind(object));
         });
-    }
-    function debug () {
-        var b = Math.sqrt((300 * (1 - 0.5)) * (300 * (1 + 0.5))),
-            el = new OrbitEllipse(150, 300, b);
-        scene.add(el.curve);
-        scene.add(el.focus[0][0]);
-        scene.add(el.focus[0][1]);
-        scene.add(el.focus[1][0]);
-        scene.add(el.focus[1][1]);
-        return {
-            a: 300,
-            b: b,
-            e: 0.25,
-            el: el
-        }
     }
     function init () {
         var canvas = $('#canvas');
@@ -746,7 +1065,7 @@ var system,
         camera = new THREE.PerspectiveCamera(35, canvas.width() / canvas.height(), 1, 20000);
         renderer = new THREE.WebGLRenderer();
 
-        camera.position.set(0, 2000, 0);
+        camera.position.set(1000, 2000, 1000);
         camera.lookAt(scene.position);
 
         renderer.setSize(canvas.width(), canvas.height());
@@ -760,9 +1079,9 @@ var system,
         //  Mark Origin (for debugging)
         scene.add(new Line(new THREE.Vector3(-5, 0, 0), new THREE.Vector3(5, 0, 0)).line);
         scene.add(new Line(new THREE.Vector3(0, 0, -5), new THREE.Vector3(0, 0, 5)).line);
+        scene.add(new Line(new THREE.Vector3(-10000, 0, 0), new THREE.Vector3(10000, 0, 0)).line);
         create();
         build();
-        // db = debug();
         start();
     }
     init();
