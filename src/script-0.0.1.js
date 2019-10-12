@@ -380,6 +380,102 @@ var system,
         return this;
     };
 
+    // function SystemII () {
+    //     this.object = new THREE.Object3D();
+    //     Object.defineProperties(this, {
+    //         polar: {
+    //             get: function () {
+    //                 return this.values.semiMajorAxis * (1 - Math.pow(this.values.e, 2)) / (1 + this.values.e * Math.cos(this.values.radian));
+    //             }
+    //         },
+    //         r: {
+    //             get: function () {
+    //                 return this.values.radian * this.values.r;
+    //             }
+    //         },
+    //         rotation: {
+    //             get: function () {
+    //                 return this.mesh.rotation.y;
+    //             },
+    //             set: function (value) {
+    //                 if (typeof value === 'number' && isFinite(value))
+    //                     this.mesh.rotation.y = value;
+    //             }
+    //         },
+    //         values: {
+    //             value: {
+    //                 e: 0,
+    //                 r: -1,
+    //                 R: 0,
+    //                 semiMajorAxis: 0,
+    //                 radian: 0,
+    //                 velocity: 0
+    //             }
+    //         },
+    //         x: {
+    //             get: function () {
+    //                 return this.object.position.x;
+    //             },
+    //             set: function (value) {
+    //                 if (typeof value === 'number' && isFinite(value))
+    //                     this.object.position.x = value;
+    //             }
+    //         },
+    //         y: {
+    //             get: function () {
+    //                 return this.object.position.y;
+    //             },
+    //             set: function (value) {
+    //                 if (typeof value === 'number' && isFinite(value))
+    //                     this.object.position.y = value;
+    //             }
+    //         },
+    //         z: {
+    //             get: function () {
+    //                 return this.object.position.z;
+    //             },
+    //             set: function (value) {
+    //                 if (typeof value === 'number' && isFinite(value))
+    //                     this.object.position.z = value;
+    //             }
+    //         }
+    //     });
+    // }
+    // SystemII.prototype.setOrbit = function (a, e, theta) {
+    //     var b = Math.sqrt((a * (1 - e)) * (a * (1 + e)));
+    //     this.orbit = new THREE.Object3D();
+    //     this.ellipse = ellipse(e * a, a, b);
+    //     Object.assign(this.values, {
+    //         c: 2 * e * a,
+    //         e: e,
+    //         focus: e * a,
+    //         period: Math.sqrt(Math.pow(a / AU, 3)),
+    //         r: r ? r * -1 : -1,
+    //         radian: this instanceof Star ? 0 : radian(Math.random() * 360),
+    //         semiMajorAxis: a,
+    //         semiMinorAxis: b,
+    //         velocity: v ? v : 1
+    //     });
+    //     this.orbit.rotation.y = radian(theta % 360);
+    //     this.orbit.add(this.object);
+    //     this.orbit.add(this.ellipse);
+    //     return this;
+    // };
+    // SystemII.prototype.setDynamics = function (v, r) {
+    //     Object.assign(this.values, {
+    //         r: r ? r * -1 : -1,
+    //         v: v ? v : 1
+    //     });
+    //     return this;
+    // };
+    // CelestialII.prototype.update = function (radians) {
+    //     this.values.radian += radians * this.values.velocity;
+    //     this.x = this.polar * Math.cos(this.values.radian) + this.values.c;
+    //     this.z = this.polar * Math.sin(this.values.radian);
+    //     this.rotation = this.r;
+    //     return this;
+    // };
+
 
     function Celestial () {
         this.object = new THREE.Object3D();
@@ -494,6 +590,7 @@ var system,
         this.orbit.rotation.y = radian(theta % 360);
         this.orbit.add(this.object);
         this.orbit.add(this.ellipse);
+        console.log(this.values);
         return this;
     };
     Celestial.prototype.update = function (radians) {
@@ -514,26 +611,8 @@ var system,
     Satellite.prototype = Object.create(Celestial.prototype);
     Satellite.prototype.constructor = Satellite;
 
-    function BinaryPlanet (seed) {
-        var p1, p2, a, b;
-        p1 = new Planet(seed);
-        p2 = new Planet(new Seed4(seed.value.split().reverse().join('')));
-        if (p1.mass > p2.mass) {
-            this.a = p1;
-            this.b = p2;
-        } else {
-            this.a = p2;
-            this.b = p1;
-        }
-        a = round(this.a.radius + this.b.radius + SEED.parseSetRatio(0) * 150 + 50);
-        b = round(a * (this.b.mass / (this.a.mass + this.b.mass)), 2) * -1; // Barrycenter
-        this.axes = [b, a + b]; // Semi-major axes values
-        this.satellites = new Collection();
-        this.seed = seed;
-    }
     function Planet (seed) {
         Celestial.call(this);
-        this.binary = seed.parseSetRatio(2) > 0.95 ? new BinaryPlanet(seed) : false;
         this.class = parse([
             Math.round((200 * system.iron) - 10),
             Math.round((500 * system.iron) - 30),
@@ -562,6 +641,23 @@ var system,
         }
         return this;
     };
+    // function BinaryPlanet (seed) {
+    //     var p1, p2;
+    //     CelestialII.call(this);
+    //     p1 = new Planet(seed);
+    //     p2 = new Planet(new Seed4(seed.value.split('').reverse().join('')));
+    //     if (p1.mass > p2.mass) {
+    //         this.a = p1;
+    //         this.b = p2;
+    //     } else {
+    //         this.a = p2;
+    //         this.b = p1;
+    //     }
+    //     this.satellites = new Collection();
+    //     this.seed = seed;
+    // }
+    // BinaryPlanet.prototype = Object.create(CelestialII.prototype);
+    // BinaryPlanet.prototype.constructor = BinaryPlanet;
 
 
     function Star (seed) {
@@ -670,6 +766,7 @@ var system,
         s2 = age(new Beta(new Seed4(SEED.getSet(4, 4))));
         a = round(s1.radius + s2.radius + SEED.parseSetRatio(0) * 150 + 50);
         b = round(a * (s2.mass / (s1.mass + s2.mass)), 2) * -1; // Barrycenter
+        console.log(a, b);
         if (s1.mass >= s2.mass) {
             system.setLabel(s1.setOrbit(b, round(SEED.parseRatio(9) * 0.01), 0, 0.5, 1), 'A')
                 .setLabel(s2.setOrbit(a + b, round(SEED.parseRatio(4) * 0.01), 0, 0.5, 1), 'B');
@@ -720,12 +817,16 @@ var system,
         var planet, moon;
         SEED = new Seed32(Seed32.create(32));
         system = new System();
-        if (system.binary) {
+        if (true) {
             binary();
         } else {
             uniary();
         }
-        planets();
+        // planets();
+        // planet = new BinaryPlanet(new Seed4(SEED.getSet(12, 4)));
+        // OBJECTS.add(planet.a);
+        // OBJECTS.add(planet.b);
+        // console.log(planet);
     }
     function build () {
         OBJECTS.each(function (object) {
