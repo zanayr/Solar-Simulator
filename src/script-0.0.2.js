@@ -352,7 +352,7 @@ var system,
     }
     Orbit.prototype.addObject = function (object) {
         var u;
-        if (object instanceof Celestial) {
+        if (object instanceof Celestial || object instanceof Ring) {
             u = this.uuid;
             Object.defineProperty(object.store, 'orbitUuid', {
                 value: u
@@ -585,12 +585,140 @@ var system,
     }
     Planet.prototype = Object.create(Celestial.prototype);
     Planet.prototype.constructor = Planet;
+    function Satellite (seed, prime) {
+        Celestial.call(this);
+        this.class = probability([prime.radius <= 7 ? 50 : 90], seed.ratio(0)); // 2 classes natural or captured
+        if (prime.radius <= 7) {
+            this.radius = round2(seed.ratio(1) * (0.5 * prime.radius) + 0.5);
+        } else {
+            this.radius = round2(seed.ratio(1) * 4 + 1);
+        }
+        this.mass = round2(seed.ratio(2) + (this.class > 1 ? 4.5 : 4 - this.class) * volume(this.radius) / 10000);
+        this.seed = seed;
+    }
+    Satellite.prototype = Object.create(Celestial.prototype);
+    Satellite.prototype.constructor = Satellite;
+
+    function Ring (seed, inner) {
+        this.class = 0;
+        this.innerRadius = inner;
+        this.outerRadius = round2(seed.ratio(0) * 5) + 5
+        this.seed = seed;
+        Object.defineProperties(this, {
+            object3d: {
+                value: new THREE.Object3D()
+            },
+            r: {
+                value: 0
+            },
+            rotation: {
+                get: function () {
+                    return this.mesh.rotation.y;
+                },
+                set: function (value) {
+                    if (value && isFinite(value))
+                        this.mesh.rotation.z = value;
+                }
+            },
+            store: {
+                value: {}
+            },
+            uuid: {
+                value: uuid()
+            },
+            values: {
+                value: {
+                    semiLatusRectum: 0,
+                    semiMajorAxis: 0,
+                    e: 0,
+                    theta: 0,
+                    phi: 0,
+                    rotation: 1,
+                    velocity: 1
+                }
+            },
+            x: {
+                get: function () {
+                    return this.object3d.position.x;
+                },
+                set: function (value) {
+                    if (value && isFinite(value))
+                        this.object3d.position.x = value;
+                    return value;
+                }
+            },
+            y: {
+                get: function () {
+                    return this.object3d.position.y;
+                },
+                set: function (value) {
+                    if (value && isFinite(value))
+                        this.object3d.position.y = value;
+                    return value;
+                }
+            },
+            z: {
+                get: function () {
+                    return this.object3d.position.z;
+                },
+                set: function (value) {
+                    if (value && isFinite(value))
+                        this.object3d.position.z = value;
+                    return value;
+                }
+            }
+        });
+        OBJECTS.add(this);
+    }
+    Ring.prototype.setDynamics = function (rotation, velocity) {
+        if (this.orbit instanceof Orbit) {
+            Object.assign(this.values, {
+                rotation: rotation && isFinite(rotation) ? rotation : 1,
+                velocity: velocity && isFinite(velocity) ? velocity : 1
+            });
+        }
+        return this;
+    };
+    Ring.prototype.setMesh = function (inner, outer, color) {
+        var u, geometry;
+        u = Math.round(outer / 20 + 6);
+        geometry = new THREE.RingGeometry(inner, outer, u);
+        this.mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({color: color, wireframe: true}));
+        this.mesh.rotation.x = Math.PI / 2;
+        this.object3d.add(this.mesh);
+        return this;
+    };
+    Ring.prototype.setOrbit = function (a, ecc, theta, phi) {
+        var e, p;
+        if (this.orbit instanceof Orbit) {
+            p = this.orbit.values.phi;
+            Object.assign(this.values, {
+                e: ecc && isFinite(ecc) ? ecc : 0,
+                phi: phi && isFinite(phi) ? toRadian(phi % 360) + p : p,
+                semiLatusRectum: a * (1 - Math.pow(ecc, 2)),
+                semiMajorAxis: a && isFinite(a) ? a : 0,
+                theta: theta && isFinite(theta) ? toRadian(theta % 360) : 0,
+            });
+            e = new OrbitEllipse(ecc * a, a, Math.sqrt((a * (1 - ecc)) * (a * (1 + ecc))));
+            this.orbit.ellipses.push(e);
+            scene.add(e.curve);
+            e.curve.rotation.y = this.values.phi;
+        }
+        return this;
+    };
+    Ring.prototype.update = function (radian) {
+        this.values.theta += radian * this.values.velocity;
+        this.x = this.r * Math.cos(this.values.theta - this.values.phi) + this.orbit.x;
+        this.z = this.r * Math.sin(this.values.theta - this.values.phi) + this.orbit.z;
+        this.rotation = this.values.rotation * (this.r ? this.values.theta : this.orbit.values.theta) * -1;
+        return this;
+    };
 
     function cthonian (star, orbit) {
         var i, l, m, p, a, e;
         m = star.radius;
         for (i = 0, l = (star.seed.parse(1) % 2) + 1; i < l; i++) {
-            p = new Planet(_values.seed.createFrom(10 + OBJECTS.length + 2, 4));
+            p = new Planet(_values.seed.createFrom(10 + i, 4));
             a = round2(p.seed.ratio(0) * 10 + 10 + p.radius);
             e = round2(p.seed.ratio(1) * (0.2 - 1 / 10));
             orbit.addObject(p);
@@ -621,22 +749,45 @@ var system,
                 .addObject(system.B);
             system.A.setDynamics(1, 1);
             system.B.setDynamics(1, 1);
-            // if (system.A.seed.parse(0) > 7)
+            if (system.A.seed.parse(0) > 7)
                 cthonian(system.A, o1);
-            // if (system.B.seed.parse(0) > 7)
+            if (system.B.seed.parse(1) > 7)
                 cthonian(system.B, o2);
-            system.min = (system.A.orbit.values.d >= system.B.orbit.values.d ? system.A.orbit.values.d : system.B.orbit.values.d) + _values.min;
+            _values.min += system.A.orbit.values.d >= system.B.orbit.values.d ? system.A.orbit.values.d : system.B.orbit.values.d
         } else {
             system.setLabel(s1, 'A');
             system.A.age();
             o1 = new Orbit(0, 0, 0, 0)
                 .addObject(system.A);
             system.A.setDynamics(1, 1);
-            // if (system.A.seed.parse(0) > 7)
+            if (system.A.seed.parse(0) > 7)
                 cthonian(system.A, o1);
-            system.min = system.A.radius + _values.min;
+            _values.min += system.A.radius;
         }
         return null;
+    }
+    function satellites (planet) {
+        var moons = [],
+            count,
+            i,
+            last = planet.radius + 10;
+        if (planet.radius <= 5) {
+            count = planet.seed.parse(3) % 2 + 1;
+        } else if (planet.radius <= 7) {
+            count = planet.seed.parse(3) % 3 + 1;
+        } else {
+            count = planet.seed.parse(3) % 4 + 4;
+        }
+        for (i = 0; i < count; i++)
+            moons.push(new Satellite(_values.seed.createFrom(20 + i, 4), planet.radius));
+        moons.forEach(function (moon, i) {
+            var a = last + moon.radius,
+                e = moon.class ? moon.seed.ratio(0) * 0.2 + 0.1 : moon.seed.ratio(0) * 0.1;
+            planet.orbit.addObject(moon);
+            moon.setOrbit(a, e, Math.random() * 360, 0)
+                .setDynamics(a < planet.radius * 8 ? 1 * Math.sign(planet.values.rotation) : moon.radius * 1.8 * Math.sign(planet.values.rotation), 11 / Math.sqrt(Math.pow((last + moon.radius) / 25, 3)));
+            last += moon.radius + 10;
+        });
     }
     function planetsDb () {
         var i, planets, last;
@@ -645,10 +796,12 @@ var system,
         for (i = 0; i < 1; i++)
             planets.push(new Planet(_values.seed.createFrom(12 + i, 4)));
         planets.forEach(function (p) {
-            o = new Orbit(100, 0, 0, 0)
+            o = new Orbit(400, 0, 0, 0)
                 .addObject(p)
                 .setVelocity(3);
-            p.setDynamics(1, 1);
+            p.setDynamics(4, 1);
+            if (p.radius > 7 || !(p.seed.parse(3) % 4))
+                satellites(p);
         });
         return null;
     }
@@ -656,45 +809,160 @@ var system,
         var i, count, planets, last;
         count = Math.round((_values.seed.ratio(12) * 5 + (system.binary ? 2 : system.A.radius / 100 * 5)));
         planets = [];
-        last = system.min - _values.seed.ratio(13) * 30;
+        last = (system.min - _values.seed.ratio(13) * 30) + 10;
+        //  Create planets
         for (i = 0; i < count; i++)
             planets.push(new Planet(_values.seed.createFrom(12 + i, 4)));
+        //  Define each planet
         planets.forEach(function (p, i) {
             var m, e, a, o, r, d;
             m = i < 10 ? 0 : 0.2;
-            if (i < count && planets[i + 1]) {
+            if ((planets[i + 1] && planets[i + 1].radius > 7) || p.radius < 4) {
+                //  The planet is either before a large planet or a a very small planet
                 e = round2(_values.seed.ratio(13 + i) * 0.2 + m);
             } else {
                 e = round2(_values.seed.ratio(13 + i) * (p.radius < 4 ? 0.2 : 0.1) + m);
             }
-            a = last + (e * 100);
-            o = new Orbit(a, e, 0, 0)
+            a = last + (e * 100); // Major axis
+            o = new Orbit(a, e, Math.random() * 360, 0)
                 .addObject(p)
                 .setVelocity(round2(2 / Math.sqrt(Math.pow(a / _values.au, 3))));
             r = round2(_values.seed.ratio(14 + i) * 20 + p.radius);
             d = _values.seed.ratio(15 + i) > 0.93 ? -1 : 1;
-            p.setDynamics(a < (system.A.class === 4 ? system.A.radius * 2 : system.min) ? 1 : r * d, 1);
+            p.setDynamics(a < system.min ? 1 : r * d, 1);
+            if (p.radius > 7 || !(p.seed.parse(3) % 4))
+                satellites(p);
             last = a + (e * 100) + (50 * (i + 1));
         });
         return null;
-    } 
+    }
+
+    function satellitesII (planet) {
+        /*  Satellites:
+            Satellite objects can be either natural satellites (moons) or rings.
+
+            The number of natural satellites depends of two factors, the class of the
+            planet and the distance from the system center
+        */
+
+        var satCount, // Satellite count
+            ringCount, // Ring count
+            s, // temp satellite variable
+            v = Math.round(planet.seed.ratio(3) * 2), // variance, set [0, 2]
+            last = planet.radius * 2.5 + 1; // "Theoretical" roche limit
+        
+        //  Define the satellite and ring count
+        switch (planet.class) {
+            case 3:
+                satCount = v + 1;
+                ringCount = Math.round(planet.seed.ratio(3) * 1 + 1);
+                break
+            case 4:
+                satCount = v + 2;
+                ringCount = Math.round(planet.seed.ratio(3) * 1 + 2);
+                break
+            default:
+                satCount = v;
+                ringCount = Math.round(planet.seed.ratio(3) * 1);
+                break
+        }
+
+        //  Define satellites
+        for (i = 0; i < satCount + ringCount; i++) {
+            s = i % 2 ? new Satellite(_values.seed.createFrom(12 + i, 4), planet) : new Ring(_values.seed.createFrom(12 + i, 4), last);
+            planet.orbit.addObject(s);
+            s.setOrbit(s instanceof Satellite ? last + s.radius + 1 : 0, 0, 0, 0)
+                .setDynamics(1, 1);
+            console.log(s);
+            console.log(s instanceof Satellite, s.radius, s.outerRadius);
+            last += s instanceof Satellite ? s.radius * 3.5 : s.outerRadius;
+            console.log(last);
+        }
+    }
+    function planetsII () {
+        /*  Planets:
+            Planet objects are created on a number of variables pulled from the global
+            seed string.
+
+            The number of planets to create depends on three factors, first the seed's
+            12th index value, if the system is binary and the class of the alpha star
+            of the system. The `variance` value is a number between zero and five, and
+            will be added the they system's `default` value. If the system is a binary
+            star system, the `default` value will be two.
+        */
+        var i, count, planets, last;
+        //  Derive planet count
+        count = (function () {
+            var v = Math.round(_values.seed.ratio(12) * 5), // variance, set [0, 5]
+                d; // Default number of planets for the system type
+            switch (system.A.class) {
+                case 4: // Red Giant
+                    d = Math.round(system.A.radius / 100 * 5);
+                    break;
+                case 5: // D
+                    d = 1
+                    break;
+                default: // M, K, G, F
+                    d = 2 + system.A.class;
+                    break;
+            }
+            return v + system.binary ? 2 : d; // Return the variance and default
+        }());
+        //  Create planets
+        planets = [];
+        for (i = 0; i < count; i++)
+            planets.push(function () { // Push new planet into the planets array
+                switch (system.A.class) {
+                    case 5:
+                        return new Planet(_values.seed.createFrom(12 + i, 4)); // White dwarf stars have a hard time getting jovan planets
+                    default:
+                        return new Planet(_values.seed.createFrom(12 + i, 4));
+                }
+            }());
+        //  Define planets and their orbits
+        last = (_values.min - _values.seed.ratio(13) * 30) + 10; // set the default value for the last orbit
+        planets.forEach(function (planet) {
+            var m, e, a, o, r, d;
+            m = i < 10 ? 0 : 0.2;
+            if ((planets[i + 1] && planets[i + 1].radius > 7) || planet.radius < 4) {
+                //  The planet is either before a large planet or a a very small planet
+                e = round2(_values.seed.ratio(13 + i) * 0.2 + m);
+            } else {
+                e = round2(_values.seed.ratio(13 + i) * (planet.radius < 4 ? 0.2 : 0.1) + m);
+            }
+            a = last + (e * 100); // Major axis
+            o = new Orbit(a, e, Math.random() * 360, 0)
+                .addObject(planet)
+                .setVelocity(round2(2 / Math.sqrt(Math.pow(a / _values.au, 3))));
+            r = round2(_values.seed.ratio(14 + i) * 20 + planet.radius);
+            d = _values.seed.ratio(15 + i) > 0.93 ? -1 : 1;
+            planet.setDynamics(a < system.min ? 1 : r * d, 1);
+            // if (p.radius > 7 || !(p.seed.parse(3) % 4))
+            //     satellites(p);
+            satellitesII(planet);
+            last = a + (e * 100) + (50 * (i + 1));
+        });
+    }
 
 
     //  App Functions  //
     function create () {
         _values.seed = new Seed(Seed.create('', 32));
         system = new System();
-        //  Create Stars
-        stars(); 
-        planets();
-        // planetsDb();
+        //  Create system objects
+        stars();
+        planetsII();
     }
     function build () {
         ORBITS.each(function (orbit) {
             LOOP.add(orbit.update.bind(orbit));
         });
         OBJECTS.each(function (object) {
-            object.setMesh(object.radius, 0xffffff);
+            if (object instanceof Ring) {
+                object.setMesh(object.innerRadius, object.outerRadius, 0xffffff);
+            } else {
+                object.setMesh(object.radius, 0xffffff);
+            }
             scene.add(object.object3d);
             LOOP.add(object.update.bind(object));
         });
