@@ -88,12 +88,12 @@ var Epsilon = (function () {
     function EpsilonOrbitEllipse (foci, major, minor, color) {
         Object.defineProperties(this, {
             ellipse: {
-                value: epsilonEllipse(foci[0], major, minor, color)
+                value: epsilonEllipse(foci, major, minor, color)
             },
             focus: {
                 value: [
-                    [epsilonLine([-5, 0, 0], [5, 0, 0], color), epsilonLine([0, 0, -5], [0, 0, -5], color)], // Origin
-                    [epsilonLine([foci[1] - 5, 0, 0], [foci[1] + 5, 0, 0], color), epsilonLine([foci[1], 0, -5], [foci[1], 0, -5], color)] // Far foci
+                    [epsilonLine([-10, 0, 0], [10, 0, 0], color), epsilonLine([0, 0, -10], [0, 0, 10], color)], // Origin
+                    [epsilonLine([foci - 5, 0, 0], [foci + 5, 0, 0], color), epsilonLine([foci, 0, -5], [foci, 0, 5], color)] // Far foci
                 ]
             },
             id: {
@@ -153,7 +153,17 @@ var Epsilon = (function () {
                 value: epsilonId()
             },
             values: {
-                value: {}
+                value: {
+                    d: 0,
+                    e: 0,
+                    phi: 0,
+                    rotation: 1,
+                    semiLatusRectum: 0,
+                    semiMajorAxis: 0,
+                    semiMinorAxis: 0,
+                    theta: 0,
+                    velocity: 1
+                }
             },
             x: {
                 get: function () {
@@ -190,7 +200,7 @@ var Epsilon = (function () {
     }
     EpsilonObject.prototype.update = function (radian) {
         this.values.theta += radian * this.values.velocity;
-        this.x = this.polarCoordinate.r * Math.cos(this.polarCoordinate.theta - this.values.phi) + this.orbit.x;
+        this.x = this.polarCoordinate.r * Math.cos(this.polarCoordinate.theta - this.values.phi) + this.orbit.x + this.values.d;
         this.z = this.polarCoordinate.r * Math.sin(this.polarCoordinate.theta - this.values.phi) + this.orbit.z;
         this.rotation = this.values.rotation * (this.polarCoordinate.r ? this.polarCoordinate.theta : this.orbit.values.theta);
     }
@@ -198,7 +208,7 @@ var Epsilon = (function () {
 
     //  Orbit  //
     function EpsilonOrbit (major, ecc, theta, phi, velocity) {
-        var a = a && isFinite(major) ? major : 0,
+        var a = major && isFinite(major) ? major : 0,
             e = ecc && isFinite(ecc) ? ecc : 0,
             b = Math.sqrt((a * (1 - e)) * (a * (1 + e)));
         Object.defineProperties(this, {
@@ -213,12 +223,12 @@ var Epsilon = (function () {
             polarCoordinate: {
                 get: function () {
                     var r = this.values.semiLatusRectum / (1 - this.values.e * Math.cos(this.values.theta));
-                    return {r: r, theta: theta};
+                    return {r: r, theta: this.values.theta};
                 }
             },
             values: {
                 value: {
-                    d: Math.abs(a) + Math.abs(a) * e,
+                    d: -2 * a * e,
                     e: e,
                     phi: (phi % 360) * (Math.PI / 180),
                     semiLatusRectum: a * (1 - Math.pow(e, 2)),
@@ -230,12 +240,12 @@ var Epsilon = (function () {
             },
             store: {
                 value: {
-                    ellipseId: new EpsilonOrbitEllipse([e * a, 2 * e * a], a, b, 0xffffff).id
+                    ellipseId: new EpsilonOrbitEllipse(-1 * e * a, a, b, 0xffffff).id
                 }
             },
             x: {
                 get: function () {
-                    return this.polarCoordinate.r * Math.cos(this.polarCoordinate.theta - this.values.phi);
+                    return this.polarCoordinate.r * Math.cos(this.polarCoordinate.theta - this.values.phi) + this.values.d;
                 }
             },
             z: {
@@ -292,14 +302,15 @@ var Epsilon = (function () {
             b = Math.sqrt((a * (1 - e)) * (a * (e + 1)));
         if (this.orbit instanceof EpsilonOrbit) {
             Object.assign(this.values, {
+                d: -2 * a * e,
                 e: e,
                 phi: phi && isFinite(phi) ? (phi % 360) * (Math.PI / 180) + this.orbit.values.phi : this.orbit.values.phi,
-                semiLatusRectum: major * (1 - Math.pow(e, 2)),
+                semiLatusRectum: a * (1 - Math.pow(e, 2)),
                 semiMajorAxis: a,
                 semiMinorAxis: b,
                 theta: theta && isFinite(theta) ? (theta % 360) * (Math.PI / 180) : 0
             });
-            this.orbit.addObject(new EpsilonOrbitEllipse([e * a, 2 * e * a], a, b, 0xffffff).rotate(this.values.phi / (Math.PI / 180)));
+            this.orbit.addObject(new EpsilonOrbitEllipse(e * a, a, b, 0xffffff).rotate(this.values.phi / (Math.PI / 180)));
         }
         return this;
     };
@@ -320,7 +331,7 @@ var Epsilon = (function () {
     
     
     //  Ring  //
-    function EpsilonRing (inner, outer, color) {
+    function EpsilonRing () {
         EpsilonObject.call(this);
         Object.defineProperties(this, {
             rotation: {
