@@ -93,7 +93,7 @@ var Epsilon = (function () {
             focus: {
                 value: [
                     [epsilonLine([-10, 0, 0], [10, 0, 0], color), epsilonLine([0, 0, -10], [0, 0, 10], color)], // Origin
-                    [epsilonLine([foci - 5, 0, 0], [foci + 5, 0, 0], color), epsilonLine([foci, 0, -5], [foci, 0, 5], color)] // Far foci
+                    // [epsilonLine([foci - 5, 0, 0], [foci + 5, 0, 0], color), epsilonLine([foci, 0, -5], [foci, 0, 5], color)] // Far foci
                 ]
             },
             id: {
@@ -104,6 +104,36 @@ var Epsilon = (function () {
             },
             store: {
                 value: {}
+            },
+            x: {
+                get: function () {
+                    return this.object3d.position.x;
+                },
+                set: function (value) {
+                    if (value && isFinite(value))
+                        this.object3d.position.x = value;
+                    return value;
+                }
+            },
+            y: {
+                get: function () {
+                    return this.object3d.position.y;
+                },
+                set: function (value) {
+                    if (value && isFinite(value))
+                        this.object3d.position.y = value;
+                    return value;
+                }
+            },
+            z: {
+                get: function () {
+                    return this.object3d.position.z;
+                },
+                set: function (value) {
+                    if (value && isFinite(value))
+                        this.object3d.position.z = value;
+                    return value;
+                }
             }
         });
         this.object3d.add(this.ellipse);
@@ -254,6 +284,7 @@ var Epsilon = (function () {
                 }
             }
         });
+        this.ellipse.rotate(this.values.phi / (Math.PI / 180));
         ORBITS.add(this);
     }
     EpsilonOrbit.prototype.addObject = function (object) {
@@ -310,11 +341,11 @@ var Epsilon = (function () {
                 semiMinorAxis: b,
                 theta: theta && isFinite(theta) ? (theta % 360) * (Math.PI / 180) : 0
             });
-            this.orbit.addObject(new EpsilonOrbitEllipse(e * a, a, b, 0xffffff).rotate(this.values.phi / (Math.PI / 180)));
+            this.orbit.addObject(new EpsilonOrbitEllipse(e * a * -1, a, b, 0xffffff).rotate(this.values.phi / (Math.PI / 180)));
         }
         return this;
     };
-    EpsilonCelestial.prototype.setDynamic = function (rotation, velocity) {
+    EpsilonCelestial.prototype.setDynamics = function (rotation, velocity) {
         if (this.orbit instanceof EpsilonOrbit)
             Object.assign(this.values, {
                 rotation: rotation && isFinite(rotation) ? rotation : 1,
@@ -326,6 +357,9 @@ var Epsilon = (function () {
         var u = Math.floor(this.radius / 20) + 13;
         this.mesh = epsilonSphere(this.radius, u, u, color);
         this.object3d.add(this.mesh);
+        this.mesh.add(epsilonLine([(this.radius + 10) * -1, 0, 0], [this.radius + 10, 0, 0], 0xffffff));
+        this.mesh.add(epsilonLine([0, (this.radius + 10) * -1, 0], [0, this.radius + 10, 0], 0xffffff));
+        this.mesh.add(epsilonLine([0, 0, (this.radius + 10) * -1], [0, 0, this.radius + 10], 0xffffff));
         return this;
     };
     
@@ -368,6 +402,7 @@ var Epsilon = (function () {
     return {
         Celestial: EpsilonCelestial,
         ellipse: ELLIPSES,
+        ellipse2: epsilonEllipse,
         line: epsilonLine,
         object: OBJECTS,
         orbit: ORBITS,
