@@ -3,7 +3,7 @@ var system,
 (function () {
     var loop,
         seed = null,
-        values = {au: 300, min: 200, speed: 0.01},
+        values = {au: 300, min: 200, speed: 0.004},
         camera = null,
         renderer = null,
         scene = null;
@@ -51,8 +51,8 @@ var system,
             // loop.updates[i](toRadian(step));
     }
     function render (step) {
-        camera.position.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), toRadian(step)));
-        camera.lookAt(scene.position);
+        // camera.position.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), toRadian(step)));
+        // camera.lookAt(scene.position);
         renderer.render(scene, camera);
     }
     function main (timestamp) {
@@ -275,7 +275,6 @@ var system,
             .addObject(p1)
             .addObject(p2);
         //  Return planets
-        console.log(a, b);
         return [a.addOrbit(c.b), b.addOrbit(c.a + c.b)];
     }
     function uniaryPlanet (s, d, prob) {
@@ -321,11 +320,11 @@ var system,
         for (i = 0; i < n; i++, l += l / 3) {
             if (seed.ratio(i) > 0.98 && l > system.min + 10) {
                 binaryPlanet(seed.createFrom(12 + i, 4), l).forEach(function (p) {
-                    p.setDynamics(p.seed.ratio(2) > 0.93 ? -1 : 1, 10);
+                    p.setDynamics(p.seed.ratio(2) > 0.93 ? -1 : 1, 60);
                 });
             } else {
                 p = uniaryPlanet(seed.createFrom(12 + i, 4), l).forEach(function (p) {
-                    p.setDynamics((l < system.min + 10 ? 1 : p.seed.ratio(1) * p.radius + p.radius) * (p.seed.ratio(2) > 0.93 ? -1 : 1));
+                    p.setDynamics((l < system.min + 10 ? 1 : p.seed.ratio(1) * 20 + 40) * (p.seed.ratio(2) > 0.93 ? -1 : 1));
                 });
             }
         }
