@@ -255,9 +255,30 @@ var system,
         this.radius = round(s.ratio(1) * (this.class !== 3 ? 2 : 4) + (3 * this.class + 2));
         this.mass = round(s.ratio(2) + (this.class > 1 ? 4.5 : 4 - this.class) * volume(this.radius) / 10000);
         this.seed = s;
+        Object.defineProperty(this, 'period', {
+            get: function () {
+                if (this.orbit.values.semiMajorAxis)
+                    return Math.sqrt(Math.pow(this.orbit.values.semiMajorAxis / values.au, 3));
+                return 0;
+            }
+        })
     }
     Planet.prototype = Object.create(Epsilon.Celestial.prototype);
     Planet.prototype.constructor = Planet;
+
+    function Satellite (prime, s) {
+        Epsilon.Celestial.call(this);
+        this.class = probability([prime.radius <= 7 ? 50 : 90], s.ratio(0)); // 2 classes natural or captured
+        if (prime.radius <= 7) {
+            this.radius = round(s.ratio(1) * (0.5 * prime.radius) + 0.5);
+        } else {
+            this.radius = round(s.ratio(1) * 4 + 1);
+        }
+        this.mass = round(s.ratio(2) + (this.class > 1 ? 4.5 : 4 - this.class) * volume(this.radius) / 10000);
+        this.seed = s;
+    }
+    Satellite.prototype = Object.create(Epsilon.Celestial.prototype);
+    Satellite.prototype.constructor = Satellite;
 
 
 
@@ -323,12 +344,44 @@ var system,
                     p.setDynamics(p.seed.ratio(2) > 0.93 ? -1 : 1, 60);
                 });
             } else {
-                p = uniaryPlanet(seed.createFrom(12 + i, 4), l).forEach(function (p) {
+                uniaryPlanet(seed.createFrom(12 + i, 4), l).forEach(function (p) {
                     p.setDynamics((l < system.min + 10 ? 1 : p.seed.ratio(1) * 20 + 40) * (p.seed.ratio(2) > 0.93 ? -1 : 1));
                 });
             }
         }
         return null;
+    }
+    function satellites () {
+        Epsilon.object.each(function (object) {
+            var n, l, i, s; // number, last orbit, iterator, satellite
+            if (object instanceof Planet && object.period >= 1) {
+                n = 0;
+                switch (object.class) {
+                    case 0:
+                        if (object.seed.ratio(2) > 0.9)
+                            n = 1;
+                        break;
+                    case 1:
+                        if (object.seed.ratio(2) > 0.66)
+                            n = (object.seed.parse(1) % 2) + 1;
+                        break;
+                    case 2:
+                        n = (object.seed.parse(1) % 2) + 1;
+                        break;
+                    case 3:
+                    default:
+                        n = (object.seed.parse(1) % 3) + 1;
+                        break;
+                }
+            }
+            l = object.radius * 2.5 + object.seed.ratio(2) * 2.5;
+            for (i = 0; i < n; i++, l += l / 3) {
+                s = new Satellite(object, seed.createFrom(20 + i, 4));
+                object.orbit.addObject(s);
+                s.addOrbit(l, s.seed.ratio(1) * 0.3, Math.random() * 360, 0)
+                    .setDynamics(1, 100 / Math.sqrt(Math.pow(l / object.radius, 3)));
+            }
+        });
     }
     function binaryStar () {
         var star1 = new Star(seed.createFrom(4, 4)),
@@ -375,7 +428,7 @@ var system,
             uniaryStar();
         }
         planets();
-        // satellites();
+        satellites();
         return null;
     }
     function build () {
@@ -401,7 +454,7 @@ var system,
         camera = new THREE.PerspectiveCamera(35, canvas.width() / canvas.height(), 1, 20000);
         renderer = new THREE.WebGLRenderer();
 
-        camera.position.set(2000, 2000, 2000);
+        camera.position.set(1000, 1000, 1000);
         camera.lookAt(scene.position);
 
         renderer.setSize(canvas.width(), canvas.height());

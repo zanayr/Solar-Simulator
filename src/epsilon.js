@@ -82,6 +82,51 @@ var Epsilon = (function () {
         return null;
     };
 
+    //  COLLECTION  //
+    function EpsilonCollection () {
+        Object.defineProperties(this, {
+            store: {
+                value: [],
+                writable: true
+            },
+            length: {
+                get: function () {
+                    return this.store.length;
+                }
+            },
+            ids: {
+                get: function () {
+                    this.store.slice(0);
+                }
+            }
+        });
+    }
+    EpsilonCollection.prototype.add = function (object) {
+        if (!this.store.includes(object.id))
+            this.store = this.store.concat(object.id);
+        return object.id;
+    };
+    EpsilonCollection.prototype.remove = function (id) {
+        if (this.store.includes(id)) {
+            this.store = this.store.filter(function (id) {
+                return id !== id;
+            });
+            return true;
+        }
+        return false;
+    };
+    EpsilonCollection.prototype.each = function (fn) {
+        var i;
+        for (i = 0, len = this.length; i < len; i++)
+            fn.apply(null, [OBJECTS.get(this.store[i]), i]);
+        return this;
+    };
+    EpsilonCollection.prototype.get = function (id) {
+        if (this.store.includes(id))
+            return OBJECTS.get(id);
+        return null;
+    };
+
 
     //  BASE EPSILON OBJECTS  //
     //  Ellipse  //
@@ -250,6 +295,9 @@ var Epsilon = (function () {
             id: {
                 value: epsilonId()
             },
+            objects: {
+                value: new EpsilonCollection()
+            },
             polarCoordinate: {
                 get: function () {
                     var r = this.values.semiLatusRectum / (1 - this.values.e * Math.cos(this.values.theta));
@@ -291,6 +339,7 @@ var Epsilon = (function () {
         var id;
         if (object instanceof EpsilonCelestial || object instanceof EpsilonOrbitEllipse) {
             id = this.id;
+            this.objects.add(object);
             Object.defineProperty(object, 'orbit', {
                 get: function () {
                     return ORBITS.get(object.store.orbitId);
@@ -357,9 +406,9 @@ var Epsilon = (function () {
         var u = Math.floor(this.radius / 20) + 13;
         this.mesh = epsilonSphere(this.radius, u, u, color);
         this.object3d.add(this.mesh);
-        this.mesh.add(epsilonLine([(this.radius + 10) * -1, 0, 0], [this.radius + 10, 0, 0], 0xffffff));
-        this.mesh.add(epsilonLine([0, (this.radius + 10) * -1, 0], [0, this.radius + 10, 0], 0xffffff));
-        this.mesh.add(epsilonLine([0, 0, (this.radius + 10) * -1], [0, 0, this.radius + 10], 0xffffff));
+        // this.mesh.add(epsilonLine([(this.radius + 10) * -1, 0, 0], [this.radius + 10, 0, 0], 0xffffff));
+        // this.mesh.add(epsilonLine([0, (this.radius + 10) * -1, 0], [0, this.radius + 10, 0], 0xffffff));
+        // this.mesh.add(epsilonLine([0, 0, (this.radius + 10) * -1], [0, 0, this.radius + 10], 0xffffff));
         return this;
     };
     
