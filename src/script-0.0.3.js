@@ -51,8 +51,8 @@ var system,
             // loop.updates[i](toRadian(step));
     }
     function render (step) {
-        // camera.position.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), toRadian(step)));
-        // camera.lookAt(scene.position);
+        camera.position.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), toRadian(step)));
+        camera.lookAt(scene.position);
         renderer.render(scene, camera);
     }
     function main (timestamp) {
@@ -337,7 +337,7 @@ var system,
             n = Math.round(seed.ratio(12) * 3);
         }
         l = system.min - seed.ratio(13) * 50 + 25;
-        scene.add(Epsilon.ellipse2(0, system.min, system.min, 0xff0000));
+        // scene.add(Epsilon.ellipse2(0, system.min, system.min, 0xff0000));
         for (i = 0; i < n; i++, l += l / 3) {
             if (seed.ratio(i) > 0.98 && l > system.min + 10) {
                 binaryPlanet(seed.createFrom(12 + i, 4), l).forEach(function (p) {
@@ -446,6 +446,7 @@ var system,
             scene.add(ellipse.object3d);
             loop.add(ellipse.update.bind(ellipse));
         });
+        system.toggleOrbits();
         return null;
     }
     function init() {
@@ -465,6 +466,13 @@ var system,
         //  Global Variables  //
         loop = new Loop(60);
         seed = new Seed(Seed.create('', 32));
+
+        window.onresize = function (e) {
+            camera.aspect = canvas.width() / canvas.height();
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(canvas.width(), canvas.height());
+        };
 
         //  DEBUGGING
         // scene.add(Epsilon.line([-5, 0, 0], [5, 0, 0], 0xffffff)); // (0, 0, 0) point
