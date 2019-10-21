@@ -96,7 +96,7 @@ var Epsilon = (function () {
             },
             ids: {
                 get: function () {
-                    this.store.slice(0);
+                    return this.store.slice(0);
                 }
             }
         });
