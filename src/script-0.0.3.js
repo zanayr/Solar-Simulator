@@ -244,8 +244,8 @@ var system,
         }
         return this;
     };
-
     function Planet (s, prob) {
+        var rC;
         Epsilon.Celestial.call(this);
         var p = prob && Array.isArray(prob) ? prob : [
             Math.round((200 * system.iron) - 10),
@@ -263,6 +263,20 @@ var system,
                 return 0;
             }
         });
+        Object.assign(this.values, (function (c) {
+            var r = 0;
+            switch (c) {
+                case 0:
+                    return {ringCount: s.ratio(3) > 0.95 ? 1 : 0, satelliteCount: s.ratio(3) > 0.90 ? 1 : 0};
+                case 1:
+                    return {ringCount: s.ratio(3) > 0.90 ? 1 : 0, satelliteCount: s.ratio(3) > 0.75 ? Math.round(s.ratio(3) * 1 + 1) : 0};
+                case 2:
+                    return {ringCount: s.ratio(3) > 0.66 ? 1 : 0, satelliteCount: Math.round(s.ratio(3) * 1 + 1)};
+                case 3:
+                    r = s.ratio(3) > 0.66 ? 3 : 1;
+                    return {ringCount: r, satelliteCount: Math.round(s.ratio(3) * (4 - r) + 1)};
+            }
+        }(this.class)));
     }
     Planet.prototype = Object.create(Epsilon.Celestial.prototype);
     Planet.prototype.constructor = Planet;
@@ -280,6 +294,16 @@ var system,
     }
     Satellite.prototype = Object.create(Epsilon.Celestial.prototype);
     Satellite.prototype.constructor = Satellite;
+
+    function Ring (prime, s, inner) {
+        Epsilon.Ring.call(this);
+        this.class = probability([prime.radius <= 11 ? 50 : 90], s.ratio(0)); // 2 classes, ring or large
+        this.inner = inner;
+        this.outer = this.class ? round(s.ratio(1) * (prime.radius / 2) + 3) : 1;
+        this.seed = s;
+    }
+    Ring.prototype = Object.create(Epsilon.Ring.prototype);
+    Ring.prototype.constructor = Ring;
 
 
 
@@ -357,22 +381,29 @@ var system,
         Epsilon.object.each(function (object, i) {
             var sC, rC, last, j, s, r;
             if (object instanceof Planet && object.orbit.objects.length < 2) {
-                sC = object.values.sCount;
-                rC = object.values.rCount;
+                sC = object.values.satelliteCount;
+                rC = object.values.ringCount;
                 last = object.radius * 2.5 + object.seed.ratio(2) * 2.5; // last orbit = roche limit + 0 - 2.5;
                 for (j = 0, l = sC + rC; j < l; j++) {
-                    if (seed.ratio(20 + i + j) < 0.5 && sC) {
-                        s = new Satellite();
+                    if (j % 2 && sC) {
+                        s = new Satellite(object, seed.createFrom(20 + i + j, 4));
+                        r = s.radius + 1;
                         sC--;
-                    } else if (rC) {
-                        r = new Ring();
-                        rC--;
+                    } else {
+                        s = new Ring(object, seed.createFrom(20 + i + j, 4), last + r);
+                        r = 1;
                     }
+                    object.orbit.addObject(s);
+                    if (s instanceof Satellite) {
+                        s.addOrbit(last, s.seed.ratio(1) * 0.3, Math.random() * 360, 0)
+                            .setDynamics(1, 100 / Math.sqrt(Math.pow(last / object.radius, 3)));
+                    } else {
+                        //  Do something
+                    }
+                    last += last / 2;
                 }
             }
         });
-        /*  Note: need to add ring count and sat count to planets. Idea is that we create them at the same time and interlace them.
-        */
     }
     function satellites () {
         Epsilon.object.each(function (object) {
@@ -451,7 +482,8 @@ var system,
             uniaryStar();
         }
         planets();
-        satellites();
+        // satellites();
+        populateSatellites();
         return null;
     }
     function build () {

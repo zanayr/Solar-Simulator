@@ -337,7 +337,7 @@ var Epsilon = (function () {
     }
     EpsilonOrbit.prototype.addObject = function (object) {
         var id;
-        if (object instanceof EpsilonCelestial || object instanceof EpsilonOrbitEllipse) {
+        if (object instanceof EpsilonObject || object instanceof EpsilonOrbitEllipse) {
             id = this.id;
             this.objects.add(object);
             Object.defineProperty(object, 'orbit', {
@@ -432,7 +432,8 @@ var Epsilon = (function () {
     EpsilonRing.prototype = Object.create(EpsilonObject.prototype);
     EpsilonRing.prototype.constructor = EpsilonRing;
     EpsilonRing.prototype.createMesh = function (color) {
-        this.mesh = epsilonRing(this,inner, this.outer, Math.floor(this.outer / 2) + 13, color);
+        this.mesh = epsilonRing(this.inner, this.outer, Math.floor(this.outer / 2) + 13, color);
+        this.mesh.rotation.x = Math.PI / 2;
         this.object3d.add(this.mesh);
     };
 
