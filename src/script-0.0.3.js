@@ -19,7 +19,7 @@ var system,
         };
     }
     function period (distance) {
-        return Math.sqrt(Math.pow(distance / values.au, 3));
+        return Math.sqrt(Math.pow(distance / system.min, 3));
     }
     function probability (table, value) {
         var v = Math.round(100 * value),
@@ -262,7 +262,7 @@ var system,
                     return Math.sqrt(Math.pow(this.orbit.values.semiMajorAxis / values.au, 3));
                 return 0;
             }
-        })
+        });
     }
     Planet.prototype = Object.create(Epsilon.Celestial.prototype);
     Planet.prototype.constructor = Planet;
@@ -338,9 +338,10 @@ var system,
             n = Math.round(seed.ratio(12) * 3);
         }
         l = system.min - seed.ratio(13) * 50 + 25;
-        // scene.add(Epsilon.ellipse2(0, system.min, system.min, 0xff0000));
+        scene.add(Epsilon.ellipse2(0, system.min, system.min, 0xff0000));
         for (i = 0; i < n; i++, l += l / 3) {
             if (seed.ratio(i) > 0.98 && l > system.min + 10) {
+                console.log('binary!');
                 binaryPlanet(seed.createFrom(12 + i, 4), l).forEach(function (p) {
                     p.setDynamics(p.seed.ratio(2) > 0.93 ? -1 : 1, 60);
                 });
@@ -352,10 +353,31 @@ var system,
         }
         return null;
     }
+    function populateSatellites () {
+        Epsilon.object.each(function (object, i) {
+            var sC, rC, last, j, s, r;
+            if (object instanceof Planet && object.orbit.objects.length < 2) {
+                sC = object.values.sCount;
+                rC = object.values.rCount;
+                last = object.radius * 2.5 + object.seed.ratio(2) * 2.5; // last orbit = roche limit + 0 - 2.5;
+                for (j = 0, l = sC + rC; j < l; j++) {
+                    if (seed.ratio(20 + i + j) < 0.5 && sC) {
+                        s = new Satellite();
+                        sC--;
+                    } else if (rC) {
+                        r = new Ring();
+                        rC--;
+                    }
+                }
+            }
+        });
+        /*  Note: need to add ring count and sat count to planets. Idea is that we create them at the same time and interlace them.
+        */
+    }
     function satellites () {
         Epsilon.object.each(function (object) {
             var n, l, i, s; // number, last orbit, iterator, satellite
-            if (object instanceof Planet && object.period >= 1) {
+            if (object instanceof Planet && object.period >= 1 && object.orbit.objects.length === 1) {
                 n = 0;
                 switch (object.class) {
                     case 0:
@@ -447,7 +469,7 @@ var system,
             scene.add(ellipse.object3d);
             loop.add(ellipse.update.bind(ellipse));
         });
-        system.toggleOrbits();
+        // system.toggleOrbits();
         return null;
     }
 
